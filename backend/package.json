@@ -19,6 +19,7 @@
     "express-rate-limit": "^7.5.1",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
+    "jwt-decode": "^4.0.0",
     "mongoose": "^8.16.2",
     "nodemailer": "^7.0.5",
     "uuid": "^11.1.0"
