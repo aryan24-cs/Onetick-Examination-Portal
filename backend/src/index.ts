@@ -285,7 +285,7 @@ const questionSchema = Joi.object({
 
 const testSchema = Joi.object({
   name: Joi.string().min(3).required(),
-  date: Joi.date().iso().required(), // Allow any valid ISO date
+  date: Joi.date().iso().required(),
   duration: Joi.number().min(1).required(),
   questions: Joi.array().items(questionSchema).min(1).required(),
 });
@@ -531,7 +531,7 @@ app.post(
         return res.status(404).json({ message: "Admin not found" });
       }
 
-      admin.password = newPassword; // Will be hashed by pre-save middleware
+      admin.password = newPassword;
       await admin.save();
       console.log("Admin password reset successful:", { email });
       res.json({ message: "Password reset successful" });
@@ -559,25 +559,20 @@ app.post(
       if (isNaN(testDate.getTime())) {
         console.log("Invalid date format:", date);
         return res.status(400).json({
-          message:
-            "Invalid date format. Use ISO format (e.g., 2025-07-11T10:20:00.000Z)",
+          message: "Invalid date format. Use ISO format (e.g., 2025-07-11T10:20:00.000Z)",
         });
       }
-      // Prevent test creation within 5 minutes of test start time
       const now = new Date();
-      const bufferTime = new Date(testDate.getTime() - 5 * 60 * 1000); // 5 minutes before test
+      const bufferTime = new Date(testDate.getTime() - 5 * 60 * 1000);
       if (now >= bufferTime) {
         console.log("Test creation too close to start time:", {
           provided: testDate.toISOString(),
           now: now.toISOString(),
           minAllowed: bufferTime.toISOString(),
         });
-        return res
-          .status(400)
-          .json({
-            message:
-              "Test cannot be created within 5 minutes of its start time",
-          });
+        return res.status(400).json({
+          message: "Test cannot be created within 5 minutes of its start time",
+        });
       }
       const test = new Test({
         testId: uuidv4(),
@@ -611,7 +606,8 @@ app.post(
 app.get("/api/tests", async (req: Request, res: Response) => {
   try {
     console.log("Fetching all tests");
-    const tests = await Test.find();
+    const tests = await Test.find().lean();
+    console.log("Tests found:", tests.map(t => ({ testId: t.testId, name: t.name })));
     res.json(tests);
   } catch (error) {
     console.error("Error fetching tests:", error);
@@ -624,22 +620,31 @@ app.get(
   authMiddleware("student"),
   async (req: AuthRequest, res: Response) => {
     try {
+      const testId = req.params.testId.trim(); // Trim whitespace
+      console.log("Fetching test with testId:", testId);
       const existingResult = await Result.findOne({
-        testId: req.params.testId,
+        testId,
         studentId: req.user!.id,
       });
       if (existingResult) {
         console.log("Test already taken:", {
-          testId: req.params.testId,
+          testId,
           studentId: req.user!.id,
         });
         return res.status(400).json({ message: "Test already taken" });
       }
-      const test = await Test.findOne({ testId: req.params.testId });
+      const test = await Test.findOne({ testId });
       if (!test) {
-        console.log("Test not found:", req.params.testId);
+        console.log("Test not found in database:", testId);
+        const allTests = await Test.find().select("testId").lean();
+        console.log("All test IDs in database:", allTests);
         return res.status(404).json({ message: "Test not found" });
       }
+      console.log("Test found:", {
+        testId: test.testId,
+        name: test.name,
+        date: test.date.toISOString(),
+      });
       res.json({
         testId: test.testId,
         name: test.name,
@@ -800,6 +805,19 @@ app.get(
     }
   }
 );
+
+// Debug route to list all tests
+app.get("/api/debug/tests", async (req: Request, res: Response) => {
+  try {
+    console.log("Fetching all tests for debugging");
+    const tests = await Test.find().select("testId name date").lean();
+    console.log("All tests:", tests);
+    res.json(tests);
+  } catch (error) {
+    console.error("Error fetching debug tests:", error);
+    res.status(500).json({ message: "Failed to fetch tests" });
+  }
+});
 
 app.use(errorHandler);
 

@@ -1,6 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { jwtDecode } from "jwt-decode";
+
+interface DecodedToken {
+  id: string;
+  role: string;
+  exp: number;
+}
 
 export default function TestPage() {
   const router = useRouter();
@@ -13,31 +20,63 @@ export default function TestPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchTest = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(
-          `http://localhost:5000/api/student/test/${testId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const data = await res.json();
-        if (res.ok) {
-          setTest(data);
-          setAnswers(new Array(data.questions.length).fill(-1));
-          setTimeLeft(data.duration * 60);
-        } else {
-          setError(data.message || "Failed to load test");
-        }
-        setLoading(false);
-      } catch (error) {
-        setError("An error occurred");
-        setLoading(false);
+    const token = localStorage.getItem("token");
+    const studentId = localStorage.getItem("studentId");
+    if (!token || !studentId) {
+      setError("Please log in as a student");
+      setTimeout(() => router.push("/"), 2000);
+      return;
+    }
+    try {
+      const decoded: DecodedToken = jwtDecode(token);
+      if (decoded.exp < Math.floor(Date.now() / 1000)) {
+        setError("Session expired. Please log in again.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("studentId");
+        setTimeout(() => router.push("/"), 2000);
+        return;
       }
-    };
-    fetchTest();
-  }, [testId]);
+      if (decoded.role !== "student") {
+        setError("Access denied. Student role required.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("studentId");
+        setTimeout(() => router.push("/"), 2000);
+        return;
+      }
+      const fetchTest = async () => {
+        try {
+          console.log("Fetching test with ID:", testId); // Debug
+          const res = await fetch(
+            `http://localhost:5000/api/student/test/${testId}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const data = await res.json();
+          console.log("Fetch response:", data); // Debug
+          if (res.ok) {
+            setTest(data);
+            setAnswers(new Array(data.questions.length).fill(-1));
+            setTimeLeft(data.duration * 60);
+          } else {
+            setError(data.message || "Failed to load test");
+          }
+          setLoading(false);
+        } catch (error) {
+          console.error("Fetch error:", error);
+          setError("An error occurred");
+          setLoading(false);
+        }
+      };
+      fetchTest();
+    } catch (err) {
+      console.error("Token decode error:", err);
+      setError("Invalid token. Please log in again.");
+      localStorage.removeItem("token");
+      localStorage.removeItem("studentId");
+      setTimeout(() => router.push("/"), 2000);
+    }
+  }, [router, testId]);
 
   useEffect(() => {
     if (timeLeft > 0) {
@@ -61,7 +100,7 @@ export default function TestPage() {
   };
 
   const handleNext = () => {
-    if (currentQuestion < test.questions.length - 1) {
+    if (test && currentQuestion < test.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     }
   };
@@ -73,7 +112,7 @@ export default function TestPage() {
   };
 
   const handleSkip = () => {
-    if (currentQuestion < test.questions.length - 1) {
+    if (test && currentQuestion < test.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     }
   };
