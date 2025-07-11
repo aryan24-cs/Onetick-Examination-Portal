@@ -1,242 +1,327 @@
-body {
-    margin: 0;
-    font-family: Arial, Helvetica, sans-serif;
-    background-color: #f4f4f4;
-    min-height: 100vh;
+/* Reset and Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
+body {
+  font-family: "Public Sans", "Noto Sans", sans-serif;
+  background-color: #f7f8fa;
+  color: #101418;
+  min-height: 100vh;
+}
+
+/* Layout */
 .layout {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 .nav {
-    background-color: #007bff;
-    padding: 15px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: #007bff;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: center;
+  gap: 12px;
 }
 
 .nav button {
-    margin: 0 10px;
-    padding: 10px 20px;
-    background-color: transparent;
-    border: none;
-    color: white;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+  padding: 10px 20px;
+  background-color: transparent;
+  border: none;
+  color: white;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
 }
 
 .nav button:hover {
-    background-color: #0056b3;
-    border-radius: 5px;
+  background-color: #0056b3;
 }
 
+/* Containers */
 .login-container,
 .register-container,
 .dashboard-container {
-    max-width: 600px;
-    margin: 50px auto;
-    padding: 20px;
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 24px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+/* Typography */
 h2 {
-    text-align: center;
-    color: #333;
-    margin-bottom: 20px;
-    font-size: 24px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #101418;
+  text-align: center;
+  margin-bottom: 24px;
 }
 
 h3 {
-    color: #333;
-    margin-bottom: 15px;
-    font-size: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #101418;
+  margin-bottom: 16px;
 }
 
 h4 {
-    color: #333;
-    margin-bottom: 10px;
-    font-size: 18px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #101418;
+  margin-bottom: 12px;
 }
 
+/* Form Elements */
 .form-group {
-    margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 .form-group label {
-    display: block;
-    margin-bottom: 5px;
-    color: #555;
-    font-weight: bold;
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #101418;
+  margin-bottom: 8px;
 }
 
 .form-group input,
 .form-group select {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    font-size: 16px;
-    outline: none;
-    transition: border-color 0.3s;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d4dbe2;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #101418;
+  background-color: #f7f8fa;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .form-group input:focus,
 .form-group select:focus {
-    border-color: #007bff;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  outline: none;
 }
 
+/* Buttons */
 button {
-    width: 100%;
-    padding: 12px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+  padding: 12px 24px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
 button:hover:not(.button-disabled) {
-    background-color: #0056b3;
+  background-color: #0056b3;
 }
 
 .button-disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
+  background-color: #d4dbe2;
+  cursor: not-allowed;
 }
 
 .button-success {
-    background-color: #28a745;
+  background-color: #28a745;
 }
 
 .button-success:hover {
-    background-color: #218838;
+  background-color: #218838;
 }
 
+.add-question-btn {
+  background-color: #17a2b8;
+}
+
+.add-question-btn:hover {
+  background-color: #138496;
+}
+
+.remove-question-btn {
+  background-color: #dc3545;
+  padding: 8px 16px;
+  font-size: 12px;
+}
+
+.remove-question-btn:hover {
+  background-color: #c82333;
+}
+
+/* Links */
 .link-text {
-    text-align: center;
-    margin-top: 15px;
-    color: #555;
+  text-align: center;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #5c728a;
 }
 
 .link-text a {
-    color: #007bff;
-    text-decoration: none;
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
 }
 
 .link-text a:hover {
-    text-decoration: underline;
+  text-decoration: underline;
 }
 
+/* Tabs */
 .tab-group {
-    display: flex;
-    margin-bottom: 20px;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 .tab {
-    flex: 1;
-    padding: 10px;
-    background-color: #e0e0e0;
-    border: none;
-    border-radius: 5px;
-    margin-right: 10px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+  flex: 1;
+  padding: 12px;
+  background-color: #eaedf1;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #101418;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
 .tab:hover {
-    background-color: #d0d0d0;
+  background-color: #d4dbe2;
 }
 
 .tab-active {
-    flex: 1;
-    padding: 10px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    margin-right: 10px;
-    cursor: pointer;
+  background-color: #007bff;
+  color: white;
 }
 
+/* Sections */
 .section {
-    margin-bottom: 30px;
+  margin-bottom: 32px;
 }
 
-.card {
-    background-color: #f9f9f9;
-    padding: 15px;
-    margin-bottom: 15px;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.create-test-section {
+  background-color: #ffffff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.button-group {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
+/* Question Form */
+.question-form {
+  padding: 16px;
+  background-color: #f7f8fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
 }
 
-.button-group button {
-    width: auto;
-    padding: 10px 20px;
+.option-input {
+  margin-bottom: 12px;
 }
 
-.question {
-    margin-bottom: 20px;
+/* Question Preview */
+.question-preview {
+  margin-top: 20px;
 }
 
-.question-text {
-    font-weight: bold;
-    margin-bottom: 10px;
+.question-card {
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.option {
-    margin-bottom: 10px;
+.question-card p {
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 
-.option input {
-    margin-right: 10px;
+.question-card ul {
+  list-style: none;
+  margin-bottom: 12px;
 }
 
-.summary {
-    color: #007bff;
-    cursor: pointer;
+.question-card li {
+  font-size: 14px;
+  color: #5c728a;
+  margin-bottom: 4px;
 }
 
-.chart-container {
-    max-width: 400px;
-    margin: 0 auto;
+.correct-option {
+  color: #28a745;
+  font-weight: 500;
 }
 
+/* Cards */
+.test-card,
+.result-card {
+  background-color: #ffffff;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.test-card h4,
+.result-card p {
+  font-size: 14px;
+  color: #101418;
+}
+
+/* Error Messages */
+.error {
+  color: #dc3545;
+  font-size: 14px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+/* Responsive Design */
 @media (max-width: 600px) {
+  .login-container,
+  .register-container,
+  .dashboard-container {
+    margin: 20px;
+    padding: 16px;
+  }
 
-    .login-container,
-    .register-container,
-    .dashboard-container {
-        margin: 20px;
-        padding: 15px;
-    }
+  .nav {
+    flex-direction: column;
+    gap: 8px;
+  }
 
-    .nav button {
-        margin: 5px;
-        padding: 8px 15px;
-        font-size: 14px;
-    }
+  .nav button {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
 
-    .tab-group {
-        flex-direction: column;
-    }
+  .tab-group {
+    flex-direction: column;
+    gap: 8px;
+  }
 
-    .tab,
-    .tab-active {
-        margin-right: 0;
-        margin-bottom: 10px;
-    }
+  .tab,
+  .tab-active {
+    padding: 10px;
+  }
+
+  .question-form {
+    padding: 12px;
+  }
+
+  .question-card {
+    padding: 12px;
+  }
 }

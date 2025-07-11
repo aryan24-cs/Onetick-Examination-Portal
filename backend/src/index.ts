@@ -42,9 +42,9 @@ const connectDB = async () => {
           password: hashedPassword,
         });
         await admin.save();
-        console.log('Admin account created');
+        console.log(`Admin account created for email: ${adminEmail}`);
       } else {
-        console.log('Admin account already exists');
+        console.log(`Admin account already exists for email: ${adminEmail}`);
       }
     } else {
       console.warn('ADMIN_EMAIL or ADMIN_PASSWORD not set in .env');
@@ -70,7 +70,9 @@ const sendOTPEmail = async (to: string, otp: string) => {
       subject: 'Your OTP for Registration',
       html: `<div style="font-family: Arial, sans-serif; padding: 20px;"><h2>OTP Verification</h2><p>Your OTP is <strong>${otp}</strong>. It is valid for 10 minutes.</p></div>`,
     });
+    console.log(`OTP email sent to ${to}`);
   } catch (error) {
+    console.error(`Failed to send OTP email to ${to}:`, error);
     throw new Error('Failed to send OTP email');
   }
 };
@@ -83,7 +85,9 @@ const sendTestNotification = async (to: string, testName: string, date: Date, du
       subject: `New Test: ${testName}`,
       html: `<div style="font-family: Arial, sans-serif; padding: 20px;"><h2>New Test Scheduled</h2><p>A new test "${testName}" is scheduled for ${date.toLocaleString()}. Duration: ${duration} minutes.</p></div>`,
     });
+    console.log(`Test notification sent to ${to}`);
   } catch (error) {
+    console.error(`Failed to send test notification to ${to}:`, error);
     throw new Error('Failed to send test notification');
   }
 };
@@ -96,7 +100,9 @@ const sendResultNotification = async (to: string, testName: string, score: numbe
       subject: `Test Result: ${testName}`,
       html: `<div style="font-family: Arial, sans-serif; padding: 20px;"><h2>Test Result</h2><p>You scored ${score}/${total} in ${testName}.</p></div>`,
     });
+    console.log(`Result notification sent to ${to}`);
   } catch (error) {
+    console.error(`Failed to send result notification to ${to}:`, error);
     throw new Error('Failed to send result notification');
   }
 };
@@ -251,16 +257,20 @@ const authMiddleware = (role: 'admin' | 'student') => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
+      console.log('No token provided in request');
       return res.status(401).json({ message: 'No token provided' });
     }
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { id: string; role: string };
+      console.log('Decoded token:', { id: decoded.id, role: decoded.role });
       if (decoded.role !== role) {
+        console.log(`Access denied: Expected role ${role}, got ${decoded.role}`);
         return res.status(403).json({ message: 'Access denied' });
       }
       req.user = decoded;
       next();
     } catch (error) {
+      console.error('Token verification error:', error);
       res.status(401).json({ message: 'Invalid token' });
     }
   };
@@ -270,6 +280,7 @@ const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const { error } = schema.validate(req.body);
     if (error) {
+      console.log('Validation error:', error.details[0].message);
       return res.status(400).json({ message: error.details[0].message });
     }
     next();
@@ -277,7 +288,7 @@ const validate = (schema: Joi.ObjectSchema) => {
 };
 
 const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error(err.stack);
+  console.error('Server error:', err.stack);
   res.status(500).json({ message: 'Internal server error' });
 };
 
@@ -286,8 +297,10 @@ const errorHandler = (err: Error, req: Request, res: Response, next: NextFunctio
 app.post('/api/auth/register', validate(registerSchema), async (req: Request, res: Response) => {
   const { name, email, password, dob, phone, address } = req.body;
   try {
+    console.log('Register attempt:', { email });
     let student = await Student.findOne({ email });
     if (student) {
+      console.log('Email already exists:', email);
       return res.status(400).json({ message: 'Email already exists' });
     }
 
@@ -306,8 +319,10 @@ app.post('/api/auth/register', validate(registerSchema), async (req: Request, re
 
     await student.save();
     await sendOTPEmail(email, otp);
+    console.log('Student registered, OTP sent:', { email, studentId: student.studentId });
     res.json({ message: 'OTP sent to email' });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ message: 'Registration failed' });
   }
 });
@@ -316,8 +331,10 @@ app.post('/api/auth/register', validate(registerSchema), async (req: Request, re
 app.post('/api/auth/verify-otp', validate(otpSchema), async (req: Request, res: Response) => {
   const { email, otp } = req.body;
   try {
+    console.log('OTP verification attempt:', { email, otp });
     const student = await Student.findOne({ email, otp, otpExpires: { $gt: new Date() } });
     if (!student) {
+      console.log('Invalid or expired OTP for:', email);
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
@@ -326,8 +343,10 @@ app.post('/api/auth/verify-otp', validate(otpSchema), async (req: Request, res: 
     await student.save();
 
     const token = jwt.sign({ id: student.studentId, role: 'student' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
-    res.json({ token, studentId: student.studentId });
+    console.log('OTP verified, token generated:', { studentId: student.studentId, token });
+    res.json({ token, studentId: student.studentId, role: 'student' });
   } catch (error) {
+    console.error('OTP verification error:', error);
     res.status(500).json({ message: 'OTP verification failed' });
   }
 });
@@ -336,14 +355,24 @@ app.post('/api/auth/verify-otp', validate(otpSchema), async (req: Request, res: 
 app.post('/api/auth/login', validate(loginSchema), async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
+    console.log('Student login attempt:', { email });
     const student = await Student.findOne({ email });
-    if (!student || !(await student.comparePassword(password))) {
+    if (!student) {
+      console.log('Student not found:', email);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await student.comparePassword(password);
+    if (!isMatch) {
+      console.log('Password mismatch for student:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const token = jwt.sign({ id: student.studentId, role: 'student' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+    console.log('Student login successful:', { studentId: student.studentId, token });
     res.json({ token, studentId: student.studentId, role: 'student' });
   } catch (error) {
+    console.error('Student login error:', error);
     res.status(500).json({ message: 'Login failed' });
   }
 });
@@ -352,15 +381,24 @@ app.post('/api/auth/login', validate(loginSchema), async (req: Request, res: Res
 app.post('/api/auth/admin/login', validate(loginSchema), async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
+    console.log('Admin login attempt:', { email });
     const admin = await Admin.findOne({ email });
-    console.log(admin);
-    if (!admin || !(await admin.comparePassword(password))) {
+    if (!admin) {
+      console.log('Admin not found:', email);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await admin.comparePassword(password);
+    if (!isMatch) {
+      console.log('Password mismatch for admin:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const token = jwt.sign({ id: admin._id, role: 'admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
-    res.json({ token, role: 'admin' });
+    console.log('Admin login successful:', { adminId: admin._id, token });
+    res.json({ token, adminId: admin._id, role: 'admin' });
   } catch (error) {
+    console.error('Admin login error:', error);
     res.status(500).json({ message: 'Admin login failed' });
   }
 });
@@ -369,6 +407,7 @@ app.post('/api/auth/admin/login', validate(loginSchema), async (req: Request, re
 app.post('/api/admin/test', authMiddleware('admin'), validate(testSchema), async (req: Request, res: Response) => {
   const { name, date, duration, questions } = req.body;
   try {
+    console.log('Creating test:', { name, date, duration });
     const test = new Test({
       testId: uuidv4(),
       name,
@@ -380,17 +419,25 @@ app.post('/api/admin/test', authMiddleware('admin'), validate(testSchema), async
 
     const students = await Student.find();
     await Promise.all(students.map((student) => sendTestNotification(student.email, name, new Date(date), duration)));
+    console.log('Test created, notifications sent:', { testId: test.testId });
 
     res.json({ success: true, testId: test.testId });
   } catch (error) {
+    console.error('Test creation error:', error);
     res.status(400).json({ message: 'Test creation failed' });
   }
 });
 
 // Get All Tests
 app.get('/api/tests', async (req: Request, res: Response) => {
-  const tests = await Test.find();
-  res.json(tests);
+  try {
+    console.log('Fetching all tests');
+    const tests = await Test.find();
+    res.json(tests);
+  } catch (error) {
+    console.error('Error fetching tests:', error);
+    res.status(500).json({ message: 'Failed to fetch tests' });
+  }
 });
 
 // Submit Test
@@ -398,8 +445,10 @@ app.post('/api/student/submit', authMiddleware('student'), validate(submitSchema
   const { testId, answers } = req.body;
   const studentId = req.user!.id;
   try {
+    console.log('Test submission:', { testId, studentId });
     const test = await Test.findOne({ testId });
     if (!test) {
+      console.log('Test not found:', testId);
       return res.status(404).json({ message: 'Test not found' });
     }
 
@@ -419,9 +468,11 @@ app.post('/api/student/submit', authMiddleware('student'), validate(submitSchema
 
     const student = await Student.findOne({ studentId });
     await sendResultNotification(student!.email, test.name, score, test.questions.length);
+    console.log('Test submitted, result saved:', { testId, studentId, score });
 
     res.json({ success: true, score, totalQuestions: test.questions.length });
   } catch (error) {
+    console.error('Test submission error:', error);
     res.status(400).json({ message: 'Submission failed' });
   }
 });
@@ -429,39 +480,62 @@ app.post('/api/student/submit', authMiddleware('student'), validate(submitSchema
 // Get Student Results
 app.get('/api/student/results/:studentId', authMiddleware('student'), async (req: AuthRequest, res: Response) => {
   if (req.user!.id !== req.params.studentId) {
+    console.log('Access denied: Student ID mismatch', { userId: req.user!.id, requestedId: req.params.studentId });
     return res.status(403).json({ message: 'Access denied' });
   }
-  const results = await Result.find({ studentId: req.params.studentId }).populate('testId');
-  res.json(results);
+  try {
+    console.log('Fetching results for student:', req.params.studentId);
+    const results = await Result.find({ studentId: req.params.studentId }).populate('testId');
+    res.json(results);
+  } catch (error) {
+    console.error('Error fetching student results:', error);
+    res.status(500).json({ message: 'Failed to fetch results' });
+  }
 });
 
 // Get Student Profile
 app.get('/api/student/profile/:studentId', authMiddleware('student'), async (req: AuthRequest, res: Response) => {
   if (req.user!.id !== req.params.studentId) {
+    console.log('Access denied: Student ID mismatch', { userId: req.user!.id, requestedId: req.params.studentId });
     return res.status(403).json({ message: 'Access denied' });
   }
-  const student = await Student.findOne({ studentId: req.params.studentId });
-  res.json(student);
+  try {
+    console.log('Fetching profile for student:', req.params.studentId);
+    const student = await Student.findOne({ studentId: req.params.studentId });
+    res.json(student);
+  } catch (error) {
+    console.error('Error fetching student profile:', error);
+    res.status(500).json({ message: 'Failed to fetch profile' });
+  }
 });
 
 // Update Student Profile
 app.put('/api/student/profile/:studentId', authMiddleware('student'), validate(profileSchema), async (req: AuthRequest, res: Response) => {
   if (req.user!.id !== req.params.studentId) {
+    console.log('Access denied: Student ID mismatch', { userId: req.user!.id, requestedId: req.params.studentId });
     return res.status(403).json({ message: 'Access denied' });
   }
   const { name, dob, phone, address } = req.body;
   try {
+    console.log('Updating profile for student:', req.params.studentId);
     await Student.updateOne({ studentId: req.params.studentId }, { name, profile: { dob, phone, address } });
     res.json({ success: true });
   } catch (error) {
+    console.error('Profile update error:', error);
     res.status(400).json({ message: 'Profile update failed' });
   }
 });
 
 // Get All Results for Admin
 app.get('/api/admin/results', authMiddleware('admin'), async (req: Request, res: Response) => {
-  const results = await Result.find().populate('testId').populate('studentId');
-  res.json(results);
+  try {
+    console.log('Fetching all results for admin');
+    const results = await Result.find().populate('testId').populate('studentId');
+    res.json(results);
+  } catch (error) {
+    console.error('Error fetching admin results:', error);
+    res.status(500).json({ message: 'Failed to fetch results' });
+  }
 });
 
 // Error Handler

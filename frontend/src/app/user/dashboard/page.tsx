@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {jwtDecode} from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
 
 interface Test {
   testId: string;
@@ -53,7 +53,8 @@ export default function UserDashboard() {
       setTimeout(() => {
         console.log('Redirecting to /');
         router.push('/');
-      }, 3000);
+        router.refresh(); // Ensure navigation completes
+      }, 2000);
       return;
     }
 
@@ -72,18 +73,28 @@ export default function UserDashboard() {
         setTimeout(() => {
           console.log('Redirecting to /');
           router.push('/');
-        }, 3000);
+          router.refresh();
+        }, 2000);
         return;
       }
 
       if (decoded.role !== 'student') {
         console.log('Invalid role, redirecting to login');
         setError('Access denied. Invalid role.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('studentId');
         setTimeout(() => {
           console.log('Redirecting to /');
           router.push('/');
-        }, 3000);
+          router.refresh();
+        }, 2000);
         return;
+      }
+
+      // Store studentId from token for consistency
+      if (decoded.id !== studentId) {
+        console.warn('StudentId mismatch, updating localStorage');
+        localStorage.setItem('studentId', decoded.id);
       }
     } catch (err) {
       console.error('Token decoding error:', err);
@@ -93,7 +104,8 @@ export default function UserDashboard() {
       setTimeout(() => {
         console.log('Redirecting to /');
         router.push('/');
-      }, 3000);
+        router.refresh();
+      }, 2000);
       return;
     }
 
@@ -120,7 +132,9 @@ export default function UserDashboard() {
     const fetchTests = async () => {
       try {
         console.log('Fetching tests');
-        const res = await fetch('http://localhost:5000/api/tests');
+        const res = await fetch('http://localhost:5000/api/tests', {
+          headers: { Authorization: `Bearer ${token}` }, // Add token for consistency
+        });
         console.log('Tests fetch status:', res.status, res.statusText);
         if (res.ok) {
           const data = await res.json();
@@ -198,6 +212,7 @@ export default function UserDashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('studentId');
     router.push('/');
+    router.refresh();
   };
 
   const { totalTests, averageScore, overallGrade } = calculateMetrics();

@@ -16,6 +16,7 @@ export default function Register() {
   const [otp, setOtp] = useState('');
   const [showOtp, setShowOtp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -24,45 +25,58 @@ export default function Register() {
 
   const handleRegister = async () => {
     setLoading(true);
+    setError('');
     try {
+      console.log('Registering with data:', formData);
       const res = await fetch('http://localhost:5000/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
       const data = await res.json();
+      console.log('Register response:', data);
       setLoading(false);
       if (data.message === 'OTP sent to email') {
         setShowOtp(true);
       } else {
-        alert(data.message);
+        setError(data.message || 'Registration failed. Please try again.');
       }
     } catch (error) {
+      console.error('Register error:', error);
       setLoading(false);
-      alert('An error occurred. Please try again.');
+      setError('An error occurred during registration. Please try again.');
     }
   };
 
   const handleVerifyOtp = async () => {
     setLoading(true);
+    setError('');
     try {
+      console.log('Verifying OTP for email:', formData.email, 'OTP:', otp);
       const res = await fetch('http://localhost:5000/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: formData.email, otp }),
       });
       const data = await res.json();
+      console.log('OTP verification response:', data);
       setLoading(false);
-      if (data.token) {
+      if (data.token && data.studentId) {
         localStorage.setItem('token', data.token);
-        localStorage.setItem('userId', data.studentId);
+        localStorage.setItem('studentId', data.studentId);
+        localStorage.setItem('role', 'student');
+        console.log('Stored in localStorage:', { token: data.token, studentId: data.studentId, role: 'student' });
         router.push('/user/dashboard');
+        setTimeout(() => {
+          router.refresh();
+        }, 100);
       } else {
-        alert(data.message);
+        setError(data.message || 'OTP verification failed. Please try again.');
       }
     } catch (error) {
+      console.error('OTP verification error:', error);
       setLoading(false);
-      alert('An error occurred. Please try again.');
+      setError('An error occurred during OTP verification. Please try again.');
     }
   };
 
@@ -70,6 +84,7 @@ export default function Register() {
     <Layout>
       <div className="register-container">
         <h2>Register</h2>
+        {error && <p className="error">{error}</p>}
         {!showOtp ? (
           <>
             <div className="form-group">
