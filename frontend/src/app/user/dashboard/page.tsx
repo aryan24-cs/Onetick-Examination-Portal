@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { jwtDecode } from 'jwt-decode';
+import Link from 'next/link';
 
 interface Test {
   testId: string;
@@ -133,7 +134,7 @@ export default function UserDashboard() {
       try {
         console.log('Fetching tests');
         const res = await fetch('http://localhost:5000/api/tests', {
-          headers: { Authorization: `Bearer ${token}` }, // Add token for consistency
+          headers: { Authorization: `Bearer ${token}` },
         });
         console.log('Tests fetch status:', res.status, res.statusText);
         if (res.ok) {
@@ -207,6 +208,13 @@ export default function UserDashboard() {
     return 'F';
   };
 
+  const isTestActive = (test: Test) => {
+    const now = new Date();
+    const testStart = new Date(test.date);
+    const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
+    return now >= testStart && now <= testEnd;
+  };
+
   const handleLogout = () => {
     console.log('Logging out');
     localStorage.removeItem('token');
@@ -221,18 +229,6 @@ export default function UserDashboard() {
     return (
       <div className="dashboard-container">
         <p>Loading...</p>
-        <style jsx>{`
-          .dashboard-container {
-            display: flex;
-            min-height: 100vh;
-            background-color: #f7f8fa;
-            font-family: 'Public Sans', 'Noto Sans', sans-serif;
-            justify-content: center;
-            align-items: center;
-            font-size: 16px;
-            color: #101418;
-          }
-        `}</style>
       </div>
     );
   }
@@ -360,6 +356,7 @@ export default function UserDashboard() {
                       <th>Subject</th>
                       <th>Date</th>
                       <th>Time</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -370,6 +367,16 @@ export default function UserDashboard() {
                           <td>{test.name}</td>
                           <td>{new Date(test.date).toLocaleDateString()}</td>
                           <td>{new Date(test.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                          <td>
+                            <Link href={`/user/test/${test.testId}`}>
+                              <button
+                                className={isTestActive(test) ? 'take-test-btn' : 'take-test-btn disabled'}
+                                disabled={!isTestActive(test)}
+                              >
+                                {isTestActive(test) ? 'Take Test' : 'Not Available'}
+                              </button>
+                            </Link>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -414,6 +421,7 @@ export default function UserDashboard() {
                     <th>Date</th>
                     <th>Time</th>
                     <th>Duration</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -425,6 +433,16 @@ export default function UserDashboard() {
                         <td>{new Date(test.date).toLocaleDateString()}</td>
                         <td>{new Date(test.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                         <td>{test.duration} min</td>
+                        <td>
+                          <Link href={`/user/test/${test.testId}`}>
+                            <button
+                              className={isTestActive(test) ? 'take-test-btn' : 'take-test-btn disabled'}
+                              disabled={!isTestActive(test)}
+                            >
+                              {isTestActive(test) ? 'Take Test' : 'Not Available'}
+                            </button>
+                          </Link>
+                        </td>
                       </tr>
                     ))}
                 </tbody>
@@ -474,220 +492,6 @@ export default function UserDashboard() {
           </div>
         )}
       </div>
-      <style jsx>{`
-        .dashboard-container {
-          display: flex;
-          min-height: 100vh;
-          background-color: #f7f8fa;
-          font-family: 'Public Sans', 'Noto Sans', sans-serif;
-        }
-
-        .sidebar {
-          width: 240px;
-          background-color: #ffffff;
-          padding: 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          border-right: 1px solid #d4dbe2;
-        }
-
-        .profile-section {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .avatar {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          background-color: #eaedf1;
-          background-image: url('https://via.placeholder.com/40');
-          background-size: cover;
-          background-position: center;
-        }
-
-        .profile-section h1 {
-          font-size: 16px;
-          font-weight: 500;
-          color: #101418;
-        }
-
-        .nav-links {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .nav-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 8px 12px;
-          cursor: pointer;
-          color: #101418;
-          font-size: 14px;
-          font-weight: 500;
-        }
-
-        .nav-item:hover {
-          background-color: #eaedf1;
-          border-radius: 12px;
-        }
-
-        .nav-item.active {
-          background-color: #eaedf1;
-          border-radius: 12px;
-        }
-
-        .nav-item svg {
-          width: 24px;
-          height: 24px;
-        }
-
-        .nav-item.logout {
-          margin-top: auto;
-          color: #d32f2f;
-        }
-
-        .main-content {
-          flex: 1;
-          padding: 20px;
-          max-width: 960px;
-        }
-
-        h2 {
-          font-size: 32px;
-          font-weight: 700;
-          color: #101418;
-          margin-bottom: 16px;
-        }
-
-        .section {
-          margin-bottom: 24px;
-        }
-
-        h3 {
-          font-size: 22px;
-          font-weight: 700;
-          color: #101418;
-          margin-bottom: 12px;
-        }
-
-        .metrics {
-          display: flex;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-
-        .metric-card {
-          flex: 1;
-          min-width: 158px;
-          padding: 24px;
-          border: 1px solid #d4dbe2;
-          border-radius: 12px;
-          background-color: #ffffff;
-        }
-
-        .metric-label {
-          font-size: 16px;
-          font-weight: 500;
-          color: #101418;
-          margin-bottom: 8px;
-        }
-
-        .metric-value {
-          font-size: 24px;
-          font-weight: 700;
-          color: #101418;
-        }
-
-        .table-container {
-          border: 1px solid #d4dbe2;
-          border-radius: 12px;
-          overflow: hidden;
-          background-color: #ffffff;
-        }
-
-        table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        th,
-        td {
-          padding: 12px 16px;
-          text-align: left;
-          font-size: 14px;
-        }
-
-        th {
-          font-weight: 500;
-          color: #101418;
-          background-color: #f7f8fa;
-        }
-
-        td {
-          color: #5c728a;
-          border-top: 1px solid #d4dbe2;
-        }
-
-        tr td:first-child {
-          color: #101418;
-          font-weight: 400;
-        }
-
-        .profile-details p {
-          font-size: 16px;
-          color: #101418;
-          margin-bottom: 8px;
-        }
-
-        .profile-details strong {
-          font-weight: 500;
-        }
-
-        .error {
-          color: #d32f2f;
-          font-size: 14px;
-          margin-bottom: 16px;
-        }
-
-        @media (max-width: 768px) {
-          .dashboard-container {
-            flex-direction: column;
-          }
-
-          .sidebar {
-            width: 100%;
-            border-right: none;
-            border-bottom: 1px solid #d4dbe2;
-          }
-
-          .main-content {
-            padding: 16px;
-          }
-
-          .metric-card {
-            min-width: 100%;
-          }
-
-          th,
-          td {
-            min-width: 120px;
-          }
-        }
-
-        @media (max-width: 480px) {
-          table th:nth-child(3),
-          table td:nth-child(3),
-          table th:nth-child(4),
-          table td:nth-child(4) {
-            display: none;
-          }
-        }
-      `}</style>
     </div>
   );
 }
