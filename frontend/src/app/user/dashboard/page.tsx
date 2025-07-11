@@ -8,12 +8,13 @@ import Link from 'next/link';
 interface Test {
   testId: string;
   name: string;
-  date: Date;
+  date: Date | string;
   duration: number;
+  questions: any[];
 }
 
 interface Result {
-  testId: { name: string; date: Date };
+  testId: { testId: string; name: string; date: Date };
   score: number;
   totalQuestions: number;
 }
@@ -43,139 +44,88 @@ export default function UserDashboard() {
     const token = localStorage.getItem('token');
     const studentId = localStorage.getItem('studentId');
 
-    console.log('Checking authentication:');
-    console.log('Token:', token ? 'Present' : 'Missing');
-    console.log('StudentId:', studentId ? 'Present' : 'Missing');
-
-    // Check if token and studentId exist
     if (!token || !studentId) {
-      console.log('Missing token or studentId, redirecting to login');
       setError('Please log in to access the dashboard');
-      setTimeout(() => {
-        console.log('Redirecting to /');
-        router.push('/');
-        router.refresh(); // Ensure navigation completes
-      }, 2000);
+      setTimeout(() => router.push('/'), 2000);
       return;
     }
 
     try {
       const decoded: DecodedToken = jwtDecode(token);
-      const currentTime = Math.floor(Date.now() / 1000);
-      console.log('Decoded token:', { id: decoded.id, role: decoded.role, exp: decoded.exp });
-      console.log('Current time:', currentTime);
-      console.log('Token expired:', decoded.exp < currentTime);
-
-      if (decoded.exp < currentTime) {
-        console.log('Token expired, redirecting to login');
+      if (decoded.exp < Math.floor(Date.now() / 1000)) {
         setError('Session expired. Please log in again.');
         localStorage.removeItem('token');
         localStorage.removeItem('studentId');
-        setTimeout(() => {
-          console.log('Redirecting to /');
-          router.push('/');
-          router.refresh();
-        }, 2000);
+        setTimeout(() => router.push('/'), 2000);
         return;
       }
-
       if (decoded.role !== 'student') {
-        console.log('Invalid role, redirecting to login');
         setError('Access denied. Invalid role.');
         localStorage.removeItem('token');
         localStorage.removeItem('studentId');
-        setTimeout(() => {
-          console.log('Redirecting to /');
-          router.push('/');
-          router.refresh();
-        }, 2000);
+        setTimeout(() => router.push('/'), 2000);
         return;
       }
-
-      // Store studentId from token for consistency
-      if (decoded.id !== studentId) {
-        console.warn('StudentId mismatch, updating localStorage');
-        localStorage.setItem('studentId', decoded.id);
-      }
     } catch (err) {
-      console.error('Token decoding error:', err);
       setError('Invalid token. Please log in again.');
       localStorage.removeItem('token');
       localStorage.removeItem('studentId');
-      setTimeout(() => {
-        console.log('Redirecting to /');
-        router.push('/');
-        router.refresh();
-      }, 2000);
+      setTimeout(() => router.push('/'), 2000);
       return;
     }
 
     const fetchProfile = async () => {
       try {
-        console.log('Fetching profile for studentId:', studentId);
         const res = await fetch(`http://localhost:5000/api/student/profile/${studentId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        console.log('Profile fetch status:', res.status, res.statusText);
         if (res.ok) {
           const data = await res.json();
-          console.log('Profile data:', data);
           setProfile(data);
         } else {
-          throw new Error(`Failed to fetch profile: ${res.statusText}`);
+          setError('Failed to fetch profile');
         }
-      } catch (err: any) {
-        console.error('Profile fetch error:', err.message);
-        setError('Error fetching profile. Please try again.');
+      } catch (err) {
+        setError('Error fetching profile');
       }
     };
 
     const fetchTests = async () => {
       try {
-        console.log('Fetching tests');
         const res = await fetch('http://localhost:5000/api/tests', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        console.log('Tests fetch status:', res.status, res.statusText);
         if (res.ok) {
           const data = await res.json();
-          console.log('Tests data:', data);
-          setTests(data);
+          setTests(data.map((test: Test) => ({ ...test, date: new Date(test.date) })));
         } else {
-          throw new Error(`Failed to fetch tests: ${res.statusText}`);
+          setError('Failed to fetch tests');
         }
-      } catch (err: any) {
-        console.error('Tests fetch error:', err.message);
-        setError('Error fetching tests. Please try again.');
+      } catch (err) {
+        setError('Error fetching tests');
       }
     };
 
     const fetchResults = async () => {
       try {
-        console.log('Fetching results for studentId:', studentId);
         const res = await fetch(`http://localhost:5000/api/student/results/${studentId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        console.log('Results fetch status:', res.status, res.statusText);
         if (res.ok) {
           const data = await res.json();
-          console.log('Results data:', data);
           setResults(data);
         } else {
-          throw new Error(`Failed to fetch results: ${res.statusText}`);
+          setError('Failed to fetch results');
         }
-      } catch (err: any) {
-        console.error('Results fetch error:', err.message);
-        setError('Error fetching results. Please try again.');
+      } catch (err) {
+        setError('Error fetching results');
       }
     };
 
     const fetchData = async () => {
-      console.log('Starting data fetch');
       setIsLoading(true);
       await Promise.all([fetchProfile(), fetchTests(), fetchResults()]);
       setIsLoading(false);
-      console.log('Data fetch completed');
     };
 
     fetchData();
@@ -212,25 +162,33 @@ export default function UserDashboard() {
     const now = new Date();
     const testStart = new Date(test.date);
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
+    console.log('Test:', test.name, 'Now:', now.toISOString(), 'Start:', testStart.toISOString(), 'End:', testEnd.toISOString(), 'Active:', now >= testStart && now <= testEnd);
     return now >= testStart && now <= testEnd;
   };
 
+  const getTestStatus = (test: Test) => {
+    const now = new Date();
+    const testStart = new Date(test.date);
+    const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
+    if (now < testStart) {
+      return `Starts at ${testStart.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+    } else if (now > testEnd) {
+      return `Ended at ${testEnd.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+    } else {
+      return 'Available';
+    }
+  };
+
   const handleLogout = () => {
-    console.log('Logging out');
     localStorage.removeItem('token');
     localStorage.removeItem('studentId');
     router.push('/');
-    router.refresh();
   };
 
   const { totalTests, averageScore, overallGrade } = calculateMetrics();
 
   if (isLoading) {
-    return (
-      <div className="dashboard-container">
-        <p>Loading...</p>
-      </div>
-    );
+    return <div className="dashboard-container"><p>Loading...</p></div>;
   }
 
   return (
@@ -241,85 +199,33 @@ export default function UserDashboard() {
           <h1>{profile?.name || 'Student'}</h1>
         </div>
         <div className="nav-links">
-          <div
-            className={`nav-item ${activeSection === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveSection('dashboard')}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-            >
-              <path
-                d="M224,115.55V208a16,16,0,0,1-16,16H168a16,16,0,0,1-16-16V168a8,8,0,0,0-8-8H112a8,8,0,0,0-8,8v40a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V115.55a16,16,0,0,1,5.17-11.78l80-75.48.11-.11a16,16,0,0,1,21.53,0,1.14,1.14,0,0,0,.11.11l80,75.48A16,16,0,0,1,224,115.55Z"
-              ></path>
+          <div className={`nav-item ${activeSection === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveSection('dashboard')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
+              <path d="M224,115.55V208a16,16,0,0,1-16,16H168a16,16,0,0,1-16-16V168a8,8,0,0,0-8-8H112a8,8,0,0,0-8,8v40a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V115.55a16,16,0,0,1,5.17-11.78l80-75.48.11-.11a16,16,0,0,1,21.53,0,1.14,1.14,0,0,0,.11.11l80,75.48A16,16,0,0,1,224,115.55Z"></path>
             </svg>
             <p>Dashboard</p>
           </div>
-          <div
-            className={`nav-item ${activeSection === 'tests' ? 'active' : ''}`}
-            onClick={() => setActiveSection('tests')}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-            >
-              <path
-                d="M216,40H40A16,16,0,0,0,24,56V216a8,8,0,0,0,11.58,7.16L64,208.94l28.42,14.22a8,8,0,0,0,7.16,0L128,208.94l28.42,14.22a8,8,0,0,0,7.16,0L192,208.94l28.42,14.22A8,8,0,0,0,232,216V56A16,16,0,0,0,216,40Zm0,163.06-20.42-10.22a8,8,0,0,0-7.16,0L160,207.06l-28.42-14.22a8,8,0,0,0-7.16,0L96,207.06,67.58,192.84a8,8,0,0,0-7.16,0L40,203.06V56H216ZM60.42,167.16a8,8,0,0,0,10.74-3.58L76.94,152h38.12l5.78,11.58a8,8,0,0,0,14.32-7.16l-32-64a8,8,0,0,0-14.32,0l-32,64A8,8,0,0,0,60.42,167.16ZM96,113.89,107.06,136H84.94ZM136,128a8,8,0,0,1,8-8h16V104a8,8,0,0,1,16,0v16h16a8,8,0,0,1,0,16H176v16a8,8,0,0,1-16,0V136H144A8,8,0,0,1,136,128Z"
-              ></path>
+          <div className={`nav-item ${activeSection === 'tests' ? 'active' : ''}`} onClick={() => setActiveSection('tests')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
+              <path d="M216,40H40A16,16,0,0,0,24,56V216a8,8,0,0,0,11.58,7.16L64,208.94l28.42,14.22a8,8,0,0,0,7.16,0L128,208.94l28.42,14.22a8,8,0,0,0,7.16,0L192,208.94l28.42,14.22A8,8,0,0,0,232,216V56A16,16,0,0,0,216,40Zm0,163.06-20.42-10.22a8,8,0,0,0-7.16,0L160,207.06l-28.42-14.22a8,8,0,0,0-7.16,0L96,207.06,67.58,192.84a8,8,0,0,0-7.16,0L40,203.06V56H216ZM60.42,167.16a8,8,0,0,0,10.74-3.58L76.94,152h38.12l5.78,11.58a8,8,0,0,0,14.32-7.16l-32-64a8,8,0,0,0-14.32,0l-32,64A8,8,0,0,0,60.42,167.16ZM96,113.89,107.06,136H84.94ZM136,128a8,8,0,0,1,8-8h16V104a8,8,0,0,1,16,0v16h16a8,8,0,0,1,0,16H176v16a8,8,0,0,1-16,0V136H144A8,8,0,0,1,136,128Z"></path>
             </svg>
             <p>Tests</p>
           </div>
-          <div
-            className={`nav-item ${activeSection === 'results' ? 'active' : ''}`}
-            onClick={() => setActiveSection('results')}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-            >
-              <path
-                d="M216,40H136V24a8,8,0,0,0-16,0V40H40A16,16,0,0,0,24,56V176a16,16,0,0,0,16,16H79.36L57.75,219a8,8,0,0,0,12.5,10l29.59-37h56.32l29.59,37a8,8,0,0,0,12.5-10l-21.61-27H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,136H40V56H216V176ZM104,120v24a8,8,0,0,1-16,0V120a8,8,0,0,1,16,0Zm32-16v40a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm32-16v56a8,8,0,0,1-16,0V88a8,8,0,0,1,16,0Z"
-              ></path>
+          <div className={`nav-item ${activeSection === 'results' ? 'active' : ''}`} onClick={() => setActiveSection('results')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
+              <path d="M216,40H136V24a8,8,0,0,0-16,0V40H40A16,16,0,0,0,24,56V176a16,16,0,0,0,16,16H79.36L57.75,219a8,8,0,0,0,12.5,10l29.59-37h56.32l29.59,37a8,8,0,0,0,12.5-10l-21.61-27H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,136H40V56H216V176ZM104,120v24a8,8,0,0,1-16,0V120a8,8,0,0,1,16,0Zm32-16v40a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm32-16v56a8,8,0,0,1-16,0V88a8,8,0,0,1,16,0Z"></path>
             </svg>
             <p>Results</p>
           </div>
-          <div
-            className={`nav-item ${activeSection === 'profile' ? 'active' : ''}`}
-            onClick={() => setActiveSection('profile')}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-            >
-              <path
-                d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,0,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,0,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z"
-              ></path>
+          <div className={`nav-item ${activeSection === 'profile' ? 'active' : ''}`} onClick={() => setActiveSection('profile')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
+              <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,0,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,0,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z"></path>
             </svg>
             <p>Profile</p>
           </div>
           <div className="nav-item logout" onClick={handleLogout}>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-            >
-              <path
-                d="M112,216a8,8,0,0,1-8,8H48a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h56a8,8,0,0,1,0,16H48V208h56A8,8,0,0,1,112,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L196.69,120H104a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,221.66,122.34Z"
-              ></path>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
+              <path d="M112,216a8,8,0,0,1-8,8H48a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h56a8,8,0,0,1,0,16H48V208h56A8,8,0,0,1,112,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L196.69,120H104a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,221.66,122.34Z"></path>
             </svg>
             <p>Logout</p>
           </div>
@@ -350,28 +256,30 @@ export default function UserDashboard() {
             <div className="section">
               <h3>Upcoming Tests</h3>
               <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th>Date</th>
-                      <th>Time</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tests
-                      .filter((test) => new Date(test.date) >= new Date())
-                      .map((test) => (
+                {tests.length === 0 ? (
+                  <p>No upcoming tests available.</p>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Subject</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tests.map((test) => (
                         <tr key={test.testId}>
                           <td>{test.name}</td>
-                          <td>{new Date(test.date).toLocaleDateString()}</td>
-                          <td>{new Date(test.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                          <td>{new Date(test.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
+                          <td>{new Date(test.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
                           <td>
                             <Link href={`/user/test/${test.testId}`}>
                               <button
                                 className={isTestActive(test) ? 'take-test-btn' : 'take-test-btn disabled'}
                                 disabled={!isTestActive(test)}
+                                title={getTestStatus(test)}
                               >
                                 {isTestActive(test) ? 'Take Test' : 'Not Available'}
                               </button>
@@ -379,8 +287,9 @@ export default function UserDashboard() {
                           </td>
                         </tr>
                       ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
             <div className="section">
@@ -399,7 +308,7 @@ export default function UserDashboard() {
                     {results.map((result, index) => (
                       <tr key={index}>
                         <td>{result.testId.name}</td>
-                        <td>{new Date(result.testId.date).toLocaleDateString()}</td>
+                        <td>{new Date(result.testId.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
                         <td>{((result.score / result.totalQuestions) * 100).toFixed(0)}%</td>
                         <td>{getGrade(result.score, result.totalQuestions)}</td>
                       </tr>
@@ -414,30 +323,32 @@ export default function UserDashboard() {
           <div className="section">
             <h3>Upcoming Tests</h3>
             <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Duration</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tests
-                    .filter((test) => new Date(test.date) >= new Date())
-                    .map((test) => (
+              {tests.length === 0 ? (
+                <p>No upcoming tests available.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Subject</th>
+                      <th>Date</th>
+                      <th>Time</th>
+                      <th>Duration</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tests.map((test) => (
                       <tr key={test.testId}>
                         <td>{test.name}</td>
-                        <td>{new Date(test.date).toLocaleDateString()}</td>
-                        <td>{new Date(test.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td>{new Date(test.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
+                        <td>{new Date(test.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
                         <td>{test.duration} min</td>
                         <td>
                           <Link href={`/user/test/${test.testId}`}>
                             <button
                               className={isTestActive(test) ? 'take-test-btn' : 'take-test-btn disabled'}
                               disabled={!isTestActive(test)}
+                              title={getTestStatus(test)}
                             >
                               {isTestActive(test) ? 'Take Test' : 'Not Available'}
                             </button>
@@ -445,8 +356,9 @@ export default function UserDashboard() {
                         </td>
                       </tr>
                     ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
@@ -467,7 +379,7 @@ export default function UserDashboard() {
                   {results.map((result, index) => (
                     <tr key={index}>
                       <td>{result.testId.name}</td>
-                      <td>{new Date(result.testId.date).toLocaleDateString()}</td>
+                      <td>{new Date(result.testId.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
                       <td>{((result.score / result.totalQuestions) * 100).toFixed(0)}%</td>
                       <td>{getGrade(result.score, result.totalQuestions)}</td>
                     </tr>

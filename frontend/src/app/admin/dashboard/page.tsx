@@ -1,14 +1,11 @@
-"use client";
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import Layout from '../../../components/Layout';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+'use client';
 
-ChartJS.register(ArcElement, Tooltip, Legend);
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { jwtDecode } from 'jwt-decode';
 
 interface Question {
-  questionId: string;
+  questionId?: string;
   question: string;
   code?: string;
   options: string[];
@@ -24,232 +21,317 @@ interface Test {
 }
 
 interface Result {
-  testId: { name: string };
-  studentId: { name: string };
+  testId: { name: string; date: string };
+  studentId: { name: string; email: string };
   score: number;
   totalQuestions: number;
 }
 
+interface DecodedToken {
+  id: string;
+  role: string;
+  exp: number;
+}
+
 export default function AdminDashboard() {
-  const [activeSection, setActiveSection] = useState('create');
+  const router = useRouter();
   const [tests, setTests] = useState<Test[]>([]);
   const [results, setResults] = useState<Result[]>([]);
+  const [activeSection, setActiveSection] = useState('createTest');
+  const [testName, setTestName] = useState('');
+  const [testDate, setTestDate] = useState('');
+  const [testTime, setTestTime] = useState('');
+  const [testDuration, setTestDuration] = useState('');
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [newTest, setNewTest] = useState({
-    name: '',
-    date: '',
-    duration: 0,
-    questionIds: [] as string[],
+  const [currentQuestion, setCurrentQuestion] = useState<Question>({
+    question: '',
+    code: '',
+    options: ['', '', '', ''],
+    correctAnswer: 0,
   });
-  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchTests();
-    fetchResults();
-    fetchQuestions();
-  }, []);
-
-  const fetchTests = async () => {
     const token = localStorage.getItem('token');
-    try {
-      const res = await fetch('http://localhost:5000/api/tests', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch tests');
-      const data = await res.json();
-      setTests(data);
-    } catch (err) {
-      setError('Error fetching tests. Please try again.');
+    const adminId = localStorage.getItem('adminId');
+
+    if (!token || !adminId) {
+      setError('Please log in as admin');
+      setTimeout(() => router.push('/'), 2000);
+      return;
     }
-  };
 
-  const fetchResults = async () => {
-    const token = localStorage.getItem('token');
     try {
-      const res = await fetch('http://localhost:5000/api/admin/results', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch results');
-      const data = await res.json();
-      setResults(data);
+      const decoded: DecodedToken = jwtDecode(token);
+      if (decoded.exp < Math.floor(Date.now() / 1000)) {
+        setError('Session expired. Please log in again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('adminId');
+        setTimeout(() => router.push('/'), 2000);
+        return;
+      }
+      if (decoded.role !== 'admin') {
+        setError('Access denied. Admin role required.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('adminId');
+        setTimeout(() => router.push('/'), 2000);
+        return;
+      }
     } catch (err) {
-      setError('Error fetching results. Please try again.');
+      setError('Invalid token. Please log in again.');
+      localStorage.removeItem('token');
+      localStorage.removeItem('adminId');
+      setTimeout(() => router.push('/'), 2000);
+      return;
     }
+
+    const fetchTests = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/tests', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTests(data);
+        } else {
+          setError('Failed to fetch tests');
+        }
+      } catch (err) {
+        setError('Error fetching tests');
+      }
+    };
+
+    const fetchResults = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/admin/results', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setResults(data);
+        } else {
+          setError('Failed to fetch results');
+        }
+      } catch (err) {
+        setError('Error fetching results');
+      }
+    };
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      await Promise.all([fetchTests(), fetchResults()]);
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, [router]);
+
+  const handleOptionChange = (index: number, value: string) => {
+    const newOptions = [...currentQuestion.options];
+    newOptions[index] = value;
+    setCurrentQuestion({ ...currentQuestion, options: newOptions });
   };
 
-  const fetchQuestions = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch('http://localhost:5000/api/admin/questions', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch questions');
-      const data = await res.json();
-      setQuestions(data);
-    } catch (err) {
-      setError('Error fetching questions. Please try again.');
+  const handleAddQuestion = () => {
+    if (!currentQuestion.question || currentQuestion.options.some(opt => !opt) || currentQuestion.correctAnswer < 0) {
+      setError('Please fill in all question fields');
+      return;
     }
-  };
-
-  const handleTestChange = (field: keyof typeof newTest, value: string | number) => {
-    setNewTest({ ...newTest, [field]: value });
-  };
-
-  const handleQuestionSelect = (questionId: string) => {
-    setSelectedQuestionIds((prev) =>
-      prev.includes(questionId)
-        ? prev.filter((id) => id !== questionId)
-        : [...prev, questionId]
-    );
+    setQuestions([...questions, currentQuestion]);
+    setCurrentQuestion({
+      question: '',
+      code: '',
+      options: ['', '', '', ''],
+      correctAnswer: 0,
+    });
+    setError('');
   };
 
   const handleCreateTest = async () => {
-    if (!newTest.name || !newTest.date || !newTest.duration || selectedQuestionIds.length === 0) {
-      setError('Please fill in all test details and select at least one question.');
+    setError('');
+    if (!testName || !testDate || !testTime || !testDuration || questions.length === 0) {
+      setError('All fields are required, and at least one question must be added');
       return;
     }
-    setLoading(true);
-    setError('');
-    const token = localStorage.getItem('token');
+
+    const [year, month, day] = testDate.split('-').map(Number);
+    const [hours, minutes] = testTime.split(':').map(Number);
+    const localDate = new Date(year, month - 1, day, hours, minutes);
+    const isoDate = localDate.toISOString(); // Correctly convert IST to UTC
+
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch('http://localhost:5000/api/admin/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...newTest, questionIds: selectedQuestionIds }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: testName,
+          date: isoDate,
+          duration: Number(testDuration),
+          questions,
+        }),
       });
       const data = await res.json();
-      setLoading(false);
-      if (data.success) {
-        fetchTests();
-        setNewTest({ name: '', date: '', duration: 0, questionIds: [] });
-        setSelectedQuestionIds([]);
-        setActiveSection('previous');
+      if (res.ok) {
+        setTests([...tests, { testId: data.testId, name: testName, date: isoDate, duration: Number(testDuration), questions }]);
+        setTestName('');
+        setTestDate('');
+        setTestTime('');
+        setTestDuration('');
+        setQuestions([]);
+        setCurrentQuestion({ question: '', code: '', options: ['', '', '', ''], correctAnswer: 0 });
       } else {
-        setError(data.message || 'Test creation failed.');
+        setError(data.message || 'Failed to create test');
       }
     } catch (err) {
-      setLoading(false);
-      setError('Error creating test. Please try again.');
+      console.error('Test creation error:', err);
+      setError('An error occurred during test creation');
     }
   };
 
-  return (
-    <Layout>
-      <div className="dashboard-container">
-        <h2>Admin Dashboard</h2>
-        {error && <p className="error">{error}</p>}
-        <div className="tab-group">
-          <button
-            className={activeSection === 'create' ? 'tab-active' : 'tab'}
-            onClick={() => setActiveSection('create')}
-          >
-            Create Test
-          </button>
-          <button
-            className={activeSection === 'previous' ? 'tab-active' : 'tab'}
-            onClick={() => setActiveSection('previous')}
-          >
-            Previous Tests
-          </button>
-          <button
-            className={activeSection === 'results' ? 'tab-active' : 'tab'}
-            onClick={() => setActiveSection('results')}
-          >
-            Results
-          </button>
-          <Link href="/admin/questions">
-            <button className={activeSection === 'questions' ? 'tab-active' : 'tab'}>
-              Questions
-            </button>
-          </Link>
-          <button onClick={() => {
-            localStorage.clear();
-            router.push('/');
-          }}>
-            Logout
-          </button>
-        </div>
+  if (isLoading) {
+    return <div className="dashboard-container"><p>Loading...</p></div>;
+  }
 
-        {activeSection === 'create' && (
+  return (
+    <div className="dashboard-container">
+      <div className="nav">
+        <button
+          className={activeSection === 'createTest' ? 'tab-active' : 'tab'}
+          onClick={() => setActiveSection('createTest')}
+        >
+          Create Test
+        </button>
+        <button
+          className={activeSection === 'tests' ? 'tab-active' : 'tab'}
+          onClick={() => setActiveSection('tests')}
+        >
+          Previous Tests
+        </button>
+        <button
+          className={activeSection === 'results' ? 'tab-active' : 'tab'}
+          onClick={() => setActiveSection('results')}
+        >
+          Results
+        </button>
+        <button className="nav-item logout" onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('adminId'); router.push('/'); }}>
+          Logout
+        </button>
+      </div>
+      <div className="main-content">
+        {error && <p className="error">{error}</p>}
+        {activeSection === 'createTest' && (
           <div className="section create-test-section">
-            <h3>Create New Test</h3>
+            <h2>Create Test</h2>
             <div className="form-group">
               <label>Test Name</label>
               <input
                 type="text"
-                value={newTest.name}
-                onChange={(e) => handleTestChange('name', e.target.value)}
+                value={testName}
+                onChange={(e) => setTestName(e.target.value)}
                 placeholder="Enter test name"
               />
             </div>
             <div className="form-group">
-              <label>Date & Time</label>
+              <label>Date</label>
               <input
-                type="datetime-local"
-                value={newTest.date}
-                onChange={(e) => handleTestChange('date', e.target.value)}
+                type="date"
+                value={testDate}
+                onChange={(e) => setTestDate(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label>Time (IST)</label>
+              <input
+                type="time"
+                value={testTime}
+                onChange={(e) => setTestTime(e.target.value)}
               />
             </div>
             <div className="form-group">
               <label>Duration (minutes)</label>
               <input
                 type="number"
-                value={newTest.duration}
-                onChange={(e) => handleTestChange('duration', parseInt(e.target.value))}
+                value={testDuration}
+                onChange={(e) => setTestDuration(e.target.value)}
                 placeholder="Enter duration"
-                min="1"
               />
             </div>
-            <h4>Select Questions</h4>
-            <div className="question-list">
-              {questions.length === 0 ? (
-                <p>No questions available. <Link href="/admin/questions">Create some questions first.</Link></p>
-              ) : (
-                questions.map((q) => (
-                  <div key={q.questionId} className="question-card">
-                    <label className="question-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={selectedQuestionIds.includes(q.questionId)}
-                        onChange={() => handleQuestionSelect(q.questionId)}
-                      />
-                      <span>
-                        <strong>{q.question}</strong>
-                        {q.code && <pre className="code-snippet">{q.code}</pre>}
-                        <ul>
-                          {q.options.map((opt, i) => (
-                            <li key={i} className={i === q.correctAnswer ? 'correct-option' : ''}>
-                              {opt}
-                            </li>
-                          ))}
-                        </ul>
-                      </span>
-                    </label>
-                  </div>
-                ))
-              )}
+            <h3>Add Question</h3>
+            <div className="form-group">
+              <label>Question</label>
+              <input
+                type="text"
+                value={currentQuestion.question}
+                onChange={(e) => setCurrentQuestion({ ...currentQuestion, question: e.target.value })}
+                placeholder="Enter question"
+              />
             </div>
-            <button
-              onClick={handleCreateTest}
-              disabled={loading}
-              className={loading ? 'button-disabled' : 'button-success'}
-            >
-              {loading ? 'Creating...' : 'Create Test'}
+            <div className="form-group">
+              <label>Code (Optional)</label>
+              <textarea
+                value={currentQuestion.code}
+                onChange={(e) => setCurrentQuestion({ ...currentQuestion, code: e.target.value })}
+                placeholder="Enter code snippet"
+                rows={5}
+              />
+            </div>
+            {currentQuestion.options.map((opt, index) => (
+              <div className="form-group" key={index}>
+                <label>Option {index + 1}</label>
+                <input
+                  type="text"
+                  value={opt}
+                  onChange={(e) => handleOptionChange(index, e.target.value)}
+                  placeholder={`Enter option ${index + 1}`}
+                />
+              </div>
+            ))}
+            <div className="form-group">
+              <label>Correct Answer</label>
+              <select
+                value={currentQuestion.correctAnswer}
+                onChange={(e) => setCurrentQuestion({ ...currentQuestion, correctAnswer: Number(e.target.value) })}
+              >
+                {currentQuestion.options.map((_, index) => (
+                  <option key={index} value={index}>Option {index + 1}</option>
+                ))}
+              </select>
+            </div>
+            <button onClick={handleAddQuestion} className="button-success">
+              Add Question
+            </button>
+            <h3>Questions Added ({questions.length})</h3>
+            <div className="question-list">
+              {questions.map((q, index) => (
+                <div key={index} className="question-card">
+                  <p><strong>Question {index + 1}: {q.question}</strong></p>
+                  {q.code && <pre className="code-snippet">{q.code}</pre>}
+                  <ul>
+                    {q.options.map((opt, i) => (
+                      <li key={i} className={i === q.correctAnswer ? 'correct-option' : ''}>{opt}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <button onClick={handleCreateTest} className="button-success" disabled={questions.length === 0}>
+              Publish Test
             </button>
           </div>
         )}
-
-        {activeSection === 'previous' && (
+        {activeSection === 'tests' && (
           <div className="section">
-            <h3>Previous Tests</h3>
+            <h2>Previous Tests</h2>
             <div className="test-list">
               {tests.map((test) => (
                 <div key={test.testId} className="test-card">
                   <h4>{test.name}</h4>
-                  <p>Date: {new Date(test.date).toLocaleString()}</p>
+                  <p>Date: {new Date(test.date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
                   <p>Duration: {test.duration} minutes</p>
                   <p>Questions: {test.questions.length}</p>
                 </div>
@@ -257,22 +339,34 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
-
         {activeSection === 'results' && (
           <div className="section">
-            <h3>Results</h3>
-            <div className="result-list">
-              {results.map((result, index) => (
-                <div key={index} className="result-card">
-                  <p><strong>Test:</strong> {result.testId.name}</p>
-                  <p><strong>Student:</strong> {result.studentId.name}</p>
-                  <p><strong>Score:</strong> {result.score}/{result.totalQuestions}</p>
-                </div>
-              ))}
+            <h2>Results</h2>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Test</th>
+                    <th>Student</th>
+                    <th>Score</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((result, index) => (
+                    <tr key={index}>
+                      <td>{result.testId.name}</td>
+                      <td>{result.studentId.name}</td>
+                      <td>{result.score}/{result.totalQuestions}</td>
+                      <td>{new Date(result.testId.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
       </div>
-    </Layout>
+    </div>
   );
 }
