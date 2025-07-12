@@ -530,10 +530,20 @@ app.get("/api/student/test/:testId", authMiddleware("student"), async (req: Auth
   try {
     const testId = req.params.testId.trim();
     console.log("Fetching test with testId:", testId);
-    const test = await Test.findOne({ testId }).lean();
+    console.log("User from token:", { userId: req.user!.id, role: req.user!.role });
+
+    // Validate testId format (UUID)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(testId)) {
+      console.log("Invalid testId format:", testId);
+      return res.status(400).json({ message: "Invalid test ID format", requestedTestId: testId });
+    }
+
+    // Check if test exists
+    const test = await Test.findOne({ testId: testId }).lean();
     if (!test) {
-      const allTests = await Test.find().select("testId name").lean();
-      console.log("All test IDs in database:", allTests.map(t => ({ testId: t.testId, name: t.name })));
+      const allTests = await Test.find().select("testId name date").lean();
+      console.log("All test IDs in database:", allTests.map(t => ({ testId: t.testId, name: t.name, date: t.date })));
       console.log("Test not found in database:", testId);
       return res.status(404).json({
         message: "Test not found",
@@ -541,17 +551,50 @@ app.get("/api/student/test/:testId", authMiddleware("student"), async (req: Auth
         availableTestIds: allTests.map(t => t.testId),
       });
     }
+
+    // Check if test has already been taken
     const existingResult = await Result.findOne({ testId, studentId: req.user!.id });
     if (existingResult) {
-      console.log("Test already taken:", { testId, studentId: req.user!.id });
-      return res.status(400).json({ message: "Test already taken" });
+      console.log("Test already taken:", { testId, studentId: req.user!.id, resultId: existingResult._id });
+      return res.status(400).json({ message: "Test already taken", testId });
     }
-    console.log("Test found:", { testId: test.testId, name: test.name, date: test.date.toISOString() });
+
+    // Check if test is active
+    const now = new Date();
+    const testStart = new Date(test.date);
+    const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
+    console.log("Test timing check:", {
+      testId,
+      now: now.toISOString(),
+      testStart: testStart.toISOString(),
+      testEnd: testEnd.toISOString(),
+    });
+    if (now < testStart || now > testEnd) {
+      console.log("Test not active:", { testId, now: now.toISOString(), testStart: testStart.toISOString(), testEnd: testEnd.toISOString() });
+      return res.status(400).json({
+        message: "Test is not currently active",
+        testId,
+        startTime: testStart.toISOString(),
+        endTime: testEnd.toISOString(),
+      });
+    }
+
+    console.log("Test found and active:", {
+      testId: test.testId,
+      name: test.name,
+      date: test.date.toISOString(),
+      duration: test.duration,
+      questionsCount: test.questions.length,
+    });
+
+    // Sanitize response to exclude correctAnswer
+    const sanitizedQuestions = test.questions.map(({ correctAnswer, ...rest }) => rest);
     res.json({
       testId: test.testId,
       name: test.name,
       duration: test.duration,
-      questions: test.questions,
+      date: test.date.toISOString(),
+      questions: sanitizedQuestions,
     });
   } catch (error) {
     console.error("Error fetching test:", error);

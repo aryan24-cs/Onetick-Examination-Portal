@@ -1,26 +1,21 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
+
+interface Question {
+  questionId: string;
+  question: string;
+  code?: string;
+  options: string[];
+}
 
 interface Test {
   testId: string;
   name: string;
-  date: Date | string;
+  date: string;
   duration: number;
-  questions: any[];
-}
-
-interface Result {
-  testId: { testId: string; name: string; date: Date };
-  score: number;
-  totalQuestions: number;
-}
-
-interface Profile {
-  name: string;
-  email: string;
-  profile: { dob: string; phone: string; address: string };
+  questions: Question[];
 }
 
 interface DecodedToken {
@@ -29,75 +24,24 @@ interface DecodedToken {
   exp: number;
 }
 
-export default function UserDashboard() {
+export default function TestPage() {
   const router = useRouter();
-  const [tests, setTests] = useState<Test[]>([]);
-  const [ongoingTests, setOngoingTests] = useState<Test[]>([]);
-  const [results, setResults] = useState<Result[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const params = useParams();
+  const testId = Array.isArray(params.testId) ? params.testId[0] : params.testId; // Handle array or string
+  const [test, setTest] = useState<Test | null>(null);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeSection, setActiveSection] = useState("dashboard");
-  const [isLoading, setIsLoading] = useState(true);
-
-  // UUID validation regex
-  const isValidUUID = (str: string) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  };
-
-  const isTestOngoing = (test: Test) => {
-    const now = new Date();
-    const testStart = new Date(test.date);
-    const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
-    const isOngoing = now >= testStart && now <= testEnd;
-    console.log("Checking test ongoing status:", {
-      testId: test.testId,
-      name: test.name,
-      now: now.toISOString(),
-      testStart: testStart.toISOString(),
-      testEnd: testEnd.toISOString(),
-      isOngoing,
-    });
-    return isOngoing;
-  };
-
-  const isTestActive = (test: Test) => {
-    const now = new Date();
-    const testStart = new Date(test.date);
-    const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
-    // Allow tests that started up to 5 minutes ago for testing
-    const isActive = now >= new Date(testStart.getTime() - 5 * 60 * 1000) && now <= testEnd;
-    console.log("Checking test activity:", {
-      testId: test.testId,
-      name: test.name,
-      now: now.toISOString(),
-      testStart: testStart.toISOString(),
-      testEnd: testEnd.toISOString(),
-      isActive,
-    });
-    return isActive;
-  };
-
-  const getTestStatus = (test: Test) => {
-    const now = new Date();
-    const testStart = new Date(test.date);
-    const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
-    if (now < testStart) {
-      return `Starts at ${testStart.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`;
-    } else if (now > testEnd) {
-      return `Ended at ${testEnd.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`;
-    } else {
-      return "Ongoing";
-    }
-  };
 
   useEffect(() => {
+    console.log("Test page loaded with params:", { params, testId });
     const token = localStorage.getItem("token");
     const studentId = localStorage.getItem("studentId");
-
     if (!token || !studentId) {
-      setError("Please log in to access the dashboard");
-      console.error("Missing token or studentId", { token, studentId });
+      setError("Please log in as a student");
+      console.error("Authentication error: Missing token or studentId", { token, studentId });
       setTimeout(() => router.push("/"), 2000);
       return;
     }
@@ -113,7 +57,7 @@ export default function UserDashboard() {
         return;
       }
       if (decoded.role !== "student") {
-        setError("Access denied. Invalid role.");
+        setError("Access denied. Student role required.");
         console.error("Invalid role", { role: decoded.role });
         localStorage.removeItem("token");
         localStorage.removeItem("studentId");
@@ -121,87 +65,103 @@ export default function UserDashboard() {
         return;
       }
 
-      const fetchProfile = async () => {
-        try {
-          const res = await fetch(`http://localhost:5000/api/student/profile/${studentId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            console.log("Profile fetched:", data);
-            setProfile(data);
-          } else {
-            setError("Failed to fetch profile");
-            console.error("Fetch profile failed:", await res.json());
-          }
-        } catch (err) {
-          console.error("Fetch profile error:", err);
-          setError("Error fetching profile");
+      const fetchTest = async () => {
+        if (!testId) {
+          console.error("Test ID is undefined or empty", { testId, params });
+          setError("Invalid test ID. Please navigate from the dashboard.");
+          setLoading(false);
+          setTimeout(() => router.push("/user/dashboard"), 2000);
+          return;
         }
-      };
 
-      const fetchTests = async () => {
+        const cleanTestId = testId.trim();
+        // Validate UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(cleanTestId)) {
+          console.error("Invalid test ID format:", cleanTestId);
+          setError("Invalid test ID format. Please navigate from the dashboard.");
+          setLoading(false);
+          setTimeout(() => router.push("/user/dashboard"), 2000);
+          return;
+        }
+
+        console.log("Fetching test", {
+          testId: cleanTestId,
+          studentId,
+          timestamp: new Date().toISOString(),
+        });
+
         try {
-          console.log("Fetching tests for dashboard");
-          const res = await fetch("http://localhost:5000/api/tests", {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const res = await fetch(`http://localhost:5000/api/student/test/${cleanTestId}`, {
             headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
+          const data = await res.json();
+          console.log("Backend response:", {
+            status: res.status,
+            ok: res.ok,
+            message: data.message,
+            error: data.error,
+            requestedTestId: cleanTestId,
+            availableTestIds: data.availableTestIds,
+            timestamp: new Date().toISOString(),
+          });
+
           if (res.ok) {
-            const data = await res.json();
-            console.log("Raw tests data:", data);
-            const validTests = data.filter((test: Test) => {
-              if (!test.testId || !isValidUUID(test.testId) || !test.name || !test.date || !test.duration) {
-                console.error("Invalid test data filtered out:", test);
-                return false;
-              }
-              return true;
+            console.log("Test loaded successfully:", {
+              testId: data.testId,
+              name: data.name,
+              date: data.date,
+              duration: data.duration,
+              activeUntil: new Date(new Date(data.date).getTime() + data.duration * 60 * 1000).toISOString(),
+              questionsCount: data.questions?.length || 0,
             });
-            if (validTests.length === 0) {
-              console.warn("No valid tests found after filtering");
-              setError("No valid tests available");
+            setTest(data);
+            setAnswers(new Array(data.questions?.length || 0).fill(-1));
+            // Calculate time left based on test start and duration
+            const start = new Date(data.date);
+            const end = new Date(start.getTime() + data.duration * 60 * 1000);
+            const now = new Date();
+            const remainingSeconds = Math.max(0, Math.floor((end.getTime() - now.getTime()) / 1000));
+            if (remainingSeconds === 0) {
+              setError("Test duration has expired.");
+              setLoading(false);
+              setTimeout(() => router.push("/user/dashboard"), 2000);
+              return;
             }
-            const parsedTests = validTests.map((test: Test) => ({ ...test, date: new Date(test.date) }));
-            setOngoingTests(parsedTests.filter((test: Test) => isTestOngoing(test)));
-            setTests(parsedTests.filter((test: Test) => !isTestOngoing(test)));
+            setTimeLeft(remainingSeconds);
           } else {
-            const data = await res.json();
-            setError(data.message || "Failed to fetch tests");
-            console.error("Fetch tests failed:", data);
+            let errorMessage = data.message || "Failed to load test. Please try again.";
+            if (data.message === "Test already taken") {
+              errorMessage = "You have already completed this test.";
+            } else if (data.message === "Test is not currently active") {
+              errorMessage = `This test is not currently active. It is available from ${new Date(data.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} to ${new Date(data.endTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`;
+            } else if (data.message === "Test not found") {
+              errorMessage = "This test does not exist. Please select a test from the dashboard.";
+            } else if (data.message === "Invalid test ID format") {
+              errorMessage = "Invalid test ID format. Please navigate from the dashboard.";
+            }
+            setError(errorMessage);
+            console.error("Test fetch failed:", {
+              status: res.status,
+              message: data.message,
+              error: data.error,
+              availableTestIds: data.availableTestIds,
+            });
+            setLoading(false);
+            setTimeout(() => router.push("/user/dashboard"), 2000);
           }
-        } catch (err) {
-          console.error("Fetch tests error:", err);
-          setError("Error fetching tests");
+        } catch (error: any) {
+          console.error("Fetch error:", error, { testId: cleanTestId });
+          setError(error.name === "AbortError" ? "Request timed out. Please check if the backend server is running." : `An error occurred: ${error.message}`);
+          setLoading(false);
+          setTimeout(() => router.push("/user/dashboard"), 2000);
         }
       };
-
-      const fetchResults = async () => {
-        try {
-          console.log("Fetching results for student:", studentId);
-          const res = await fetch(`http://localhost:5000/api/student/results/${studentId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            console.log("Results fetched:", data);
-            setResults(data);
-          } else {
-            const data = await res.json();
-            setError(data.message || "Failed to fetch results");
-            console.error("Fetch results failed:", data);
-          }
-        } catch (err) {
-          console.error("Fetch results error:", err);
-          setError("Error fetching results");
-        }
-      };
-
-      const fetchData = async () => {
-        setIsLoading(true);
-        await Promise.all([fetchProfile(), fetchTests(), fetchResults()]);
-        setIsLoading(false);
-      };
-
-      fetchData();
+      fetchTest();
     } catch (err) {
       console.error("Token decode error:", err);
       setError("Invalid token. Please log in again.");
@@ -209,387 +169,126 @@ export default function UserDashboard() {
       localStorage.removeItem("studentId");
       setTimeout(() => router.push("/"), 2000);
     }
-  }, [router]);
+  }, [router, testId]);
 
-  const calculateMetrics = () => {
-    const totalTests = results.length;
-    const averageScore = totalTests
-      ? (results.reduce((sum, r) => sum + (r.score / r.totalQuestions) * 100, 0) / totalTests).toFixed(0) + "%"
-      : "N/A";
-    const overallGrade = totalTests
-      ? results.every((r) => (r.score / r.totalQuestions) * 100 >= 90)
-        ? "A"
-        : results.every((r) => (r.score / r.totalQuestions) * 100 >= 80)
-        ? "B"
-        : results.every((r) => (r.score / r.totalQuestions) * 100 >= 70)
-        ? "C"
-        : "D"
-      : "N/A";
+  useEffect(() => {
+    if (timeLeft > 0 && test) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            console.log("Timer expired, auto-submitting test", { testId });
+            handleSubmit();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [timeLeft, test]);
 
-    return { totalTests, averageScore, overallGrade };
-  };
+  const handleAnswer = useCallback((optionIndex: number) => {
+    const newAnswers = [...answers];
+    newAnswers[currentQuestion] = optionIndex;
+    setAnswers(newAnswers);
+  }, [answers, currentQuestion]);
 
-  const getGrade = (score: number, total: number) => {
-    const percentage = (score / total) * 100;
-    if (percentage >= 90) return "A";
-    if (percentage >= 80) return "B";
-    if (percentage >= 70) return "C";
-    if (percentage >= 60) return "D";
-    return "F";
-  };
+  const handleNext = useCallback(() => {
+    if (test && currentQuestion < test.questions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+    }
+  }, [test, currentQuestion]);
 
-  const handleTakeTestClick = (testId: string, testName: string) => {
-    if (!testId || !isValidUUID(testId)) {
-      console.error("Take Test button clicked with invalid testId:", testId);
-      setError("Cannot navigate to test: Invalid test ID");
+  const handlePrevious = useCallback(() => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1);
+    }
+  }, [currentQuestion]);
+
+  const handleSkip = useCallback(() => {
+    if (test && currentQuestion < test.questions.length - 1) {
+      const newAnswers = [...answers];
+      newAnswers[currentQuestion] = -1; // Explicitly mark as skipped
+      setAnswers(newAnswers);
+      setCurrentQuestion(currentQuestion + 1);
+    }
+  }, [test, currentQuestion, answers]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!test) {
+      setError("No test data available for submission.");
       return;
     }
-    console.log("Take Test button clicked for test:", { testId, testName });
-    router.push(`/user/test/${testId}`);
-  };
+    if (!window.confirm("Are you sure you want to submit the test?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const cleanTestId = testId?.trim();
+      console.log("Submitting test", { testId: cleanTestId, answers });
+      const res = await fetch("http://localhost:5000/api/student/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ testId: cleanTestId, answers }),
+      });
+      const data = await res.json();
+      console.log("Submit response:", data);
+      if (res.ok) {
+        router.push("/user/dashboard");
+      } else {
+        setError(data.message || "Submission failed. Please try again.");
+      }
+    } catch (error: any) {
+      console.error("Submit error:", error);
+      setError(`An error occurred during submission: ${error.message}`);
+    }
+  }, [testId, answers, router, test]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("studentId");
-    router.push("/");
-  };
-
-  const { totalTests, averageScore, overallGrade } = calculateMetrics();
-
-  if (isLoading) {
-    return <div className="dashboard-container"><p>Loading...</p></div>;
-  }
+  if (loading) return <div className="loading">Loading...</div>;
+  if (error) return <div className="error">{error}</div>;
+  if (!test) return <div className="error">No test data available. Please navigate from the dashboard.</div>;
 
   return (
-    <div className="dashboard-container">
-      <div className="sidebar">
-        <div className="profile-section">
-          <div className="avatar"></div>
-          <h1>{profile?.name || "Student"}</h1>
-        </div>
-        <div className="nav-links">
-          <div className={`nav-item ${activeSection === "dashboard" ? "active" : ""}`} onClick={() => setActiveSection("dashboard")}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
-              <path d="M224,115.55V208a16,16,0,0,1-16,16H168a16,16,0,0,1-16-16V168a8,8,0,0,0-8-8H112a8,8,0,0,0-8,8v40a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V115.55a16,16,0,0,1,5.17-11.78l80-75.48.11-.11a16,16,0,0,1,21.53,0,1.14,1.14,0,0,0,.11.11l80,75.48A16,16,0,0,1,224,115.55Z"></path>
-            </svg>
-            <p>Dashboard</p>
-          </div>
-          <div className={`nav-item ${activeSection === "tests" ? "active" : ""}`} onClick={() => setActiveSection("tests")}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
-              <path d="M216,40H40A16,16,0,0,0,24,56V216a8,8,0,0,0,11.58,7.16L64,208.94l28.42,14.22a8,8,0,0,0,7.16,0L128,208.94l28.42,14.22a8,8,0,0,0,7.16,0L192,208.94l28.42,14.22A8,8,0,0,0,232,216V56A16,16,0,0,0,216,40Zm0,163.06-20.42-10.22a8,8,0,0,0-7.16,0L160,207.06l-28.42-14.22a8,8,0,0,0-7.16,0L96,207.06,67.58,192.84a8,8,0,0,0-7.16,0L40,203.06V56H216ZM60.42,167.16a8,8,0,0,0,10.74-3.58L76.94,152h38.12l5.78,11.58a8,8,0,0,0,14.32-7.16l-32-64a8,8,0,0,0-14.32,0l-32,64A8,8,0,0,0,60.42,167.16ZM96,113.89,107.06,136H84.94ZM136,128a8,8,0,0,1,8-8h16V104a8,8,0,0,1,16,0v16h16a8,8,0,0,1,0,16H176v16a8,8,0,0,1-16,0V136H144A8,8,0,0,1,136,128Z"></path>
-            </svg>
-            <p>Tests</p>
-          </div>
-          <div className={`nav-item ${activeSection === "results" ? "active" : ""}`} onClick={() => setActiveSection("results")}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
-              <path d="M216,40H136V24a8,8,0,0,0-16,0V40H40A16,16,0,0,0,24,56V176a16,16,0,0,0,16,16H79.36L57.75,219a8,8,0,0,0,12.5,10l29.59-37h56.32l29.59,37a8,8,0,0,0,12.5-10l-21.61-27H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,136H40V56H216V176ZM104,120v24a8,8,0,0,1-16,0V120a8,8,0,0,1,16,0Zm32-16v40a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm32-16v56a8,8,0,0,1-16,0V88a8,8,0,0,1,16,0Z"></path>
-            </svg>
-            <p>Results</p>
-          </div>
-          <div className={`nav-item ${activeSection === "profile" ? "active" : ""}`} onClick={() => setActiveSection("profile")}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
-              <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,0,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,0,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z"></path>
-            </svg>
-            <p>Profile</p>
-          </div>
-          <div className="nav-item logout" onClick={handleLogout}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
-              <path d="M112,216a8,8,0,0,1-8,8H48a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h56a8,8,0,0,1,0,16H48V208h56A8,8,0,0,1,112,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L196.69,120H104a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,221.66,122.34Z"></path>
-            </svg>
-            <p>Logout</p>
-          </div>
+    <div className="test-container">
+      <h2>{test.name}</h2>
+      <div className="timer">
+        Time Left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+      </div>
+      <div className="question-card">
+        <p className="question-text">
+          Question {currentQuestion + 1}: {test.questions[currentQuestion].question}
+        </p>
+        {test.questions[currentQuestion].code && (
+          <pre className="code-snippet">{test.questions[currentQuestion].code}</pre>
+        )}
+        <div className="options">
+          {test.questions[currentQuestion].options.map((opt: string, i: number) => (
+            <label key={i} className="option">
+              <input
+                type="radio"
+                name={`question-${currentQuestion}`}
+                checked={answers[currentQuestion] === i}
+                onChange={() => handleAnswer(i)}
+              />
+              {opt}
+            </label>
+          ))}
         </div>
       </div>
-      <div className="main-content">
-        {error && <p className="error">{error}</p>}
-        {activeSection === "dashboard" && (
-          <>
-            <h2>Dashboard</h2>
-            <div className="section">
-              <h3>Performance Overview</h3>
-              <div className="metrics">
-                <div className="metric-card">
-                  <p className="metric-label">Overall Grade</p>
-                  <p className="metric-value">{overallGrade}</p>
-                </div>
-                <div className="metric-card">
-                  <p className="metric-label">Average Score</p>
-                  <p className="metric-value">{averageScore}</p>
-                </div>
-                <div className="metric-card">
-                  <p className="metric-label">Tests Taken</p>
-                  <p className="metric-value">{totalTests}</p>
-                </div>
-              </div>
-            </div>
-            <div className="section">
-              <h3>Ongoing Tests</h3>
-              <div className="table-container">
-                {ongoingTests.length === 0 ? (
-                  <p>No ongoing tests available.</p>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ongoingTests.map((test) => {
-                        console.log("Rendering ongoing test:", {
-                          testId: test.testId,
-                          name: test.name,
-                          date: test.date.toString(),
-                        });
-                        return (
-                          <tr key={test.testId || Math.random()}>
-                            <td>{test.name}</td>
-                            <td>{new Date(test.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                            <td>{new Date(test.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}</td>
-                            <td>{getTestStatus(test)}</td>
-                            <td>
-                              <button
-                                onClick={() => handleTakeTestClick(test.testId, test.name)}
-                                className={isTestActive(test) ? "take-test-btn" : "take-test-btn disabled"}
-                                disabled={!isTestActive(test)}
-                                title={getTestStatus(test)}
-                              >
-                                {isTestActive(test) ? "Take Test" : "Not Available"}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-            <div className="section">
-              <h3>Upcoming Tests</h3>
-              <div className="table-container">
-                {tests.filter((test) => new Date(test.date) > new Date()).length === 0 ? (
-                  <p>No upcoming tests available.</p>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tests.filter((test) => new Date(test.date) > new Date()).map((test) => {
-                        console.log("Rendering upcoming test:", {
-                          testId: test.testId,
-                          name: test.name,
-                          date: test.date.toString(),
-                        });
-                        return (
-                          <tr key={test.testId || Math.random()}>
-                            <td>{test.name}</td>
-                            <td>{new Date(test.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                            <td>{new Date(test.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}</td>
-                            <td>{getTestStatus(test)}</td>
-                            <td>
-                              <button
-                                onClick={() => handleTakeTestClick(test.testId, test.name)}
-                                className={isTestActive(test) ? "take-test-btn" : "take-test-btn disabled"}
-                                disabled={!isTestActive(test)}
-                                title={getTestStatus(test)}
-                              >
-                                {isTestActive(test) ? "Take Test" : "Not Available"}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-            <div className="section">
-              <h3>Previous Test Results</h3>
-              <div className="table-container">
-                {results.length === 0 ? (
-                  <p>No previous test results available.</p>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Date</th>
-                        <th>Score</th>
-                        <th>Grade</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.map((result, index) => (
-                        <tr key={index}>
-                          <td>{result.testId.name}</td>
-                          <td>{new Date(result.testId.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                          <td>{((result.score / result.totalQuestions) * 100).toFixed(0)}%</td>
-                          <td>{getGrade(result.score, result.totalQuestions)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-        {activeSection === "tests" && (
-          <div className="section">
-            <h3>Ongoing Tests</h3>
-            <div className="table-container">
-              {ongoingTests.length === 0 ? (
-                <p>No ongoing tests available.</p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th>Date</th>
-                      <th>Time</th>
-                      <th>Duration</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ongoingTests.map((test) => {
-                      console.log("Rendering ongoing test:", {
-                        testId: test.testId,
-                        name: test.name,
-                        date: test.date.toString(),
-                      });
-                      return (
-                        <tr key={test.testId || Math.random()}>
-                          <td>{test.name}</td>
-                          <td>{new Date(test.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                          <td>{new Date(test.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}</td>
-                          <td>{test.duration} min</td>
-                          <td>{getTestStatus(test)}</td>
-                          <td>
-                            <button
-                              onClick={() => handleTakeTestClick(test.testId, test.name)}
-                              className={isTestActive(test) ? "take-test-btn" : "take-test-btn disabled"}
-                              disabled={!isTestActive(test)}
-                              title={getTestStatus(test)}
-                            >
-                              {isTestActive(test) ? "Take Test" : "Not Available"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <h3>Upcoming Tests</h3>
-            <div className="table-container">
-              {tests.filter((test) => new Date(test.date) > new Date()).length === 0 ? (
-                <p>No upcoming tests available.</p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th>Date</th>
-                      <th>Time</th>
-                      <th>Duration</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tests.filter((test) => new Date(test.date) > new Date()).map((test) => {
-                      console.log("Rendering upcoming test:", {
-                        testId: test.testId,
-                        name: test.name,
-                        date: test.date.toString(),
-                      });
-                      return (
-                        <tr key={test.testId || Math.random()}>
-                          <td>{test.name}</td>
-                          <td>{new Date(test.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                          <td>{new Date(test.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}</td>
-                          <td>{test.duration} min</td>
-                          <td>{getTestStatus(test)}</td>
-                          <td>
-                            <button
-                              onClick={() => handleTakeTestClick(test.testId, test.name)}
-                              className={isTestActive(test) ? "take-test-btn" : "take-test-btn disabled"}
-                              disabled={!isTestActive(test)}
-                              title={getTestStatus(test)}
-                            >
-                              {isTestActive(test) ? "Take Test" : "Not Available"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-        {activeSection === "results" && (
-          <div className="section">
-            <h3>Previous Test Results</h3>
-            <div className="table-container">
-              {results.length === 0 ? (
-                <p>No previous test results available.</p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th>Date</th>
-                      <th>Score</th>
-                      <th>Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((result, index) => (
-                      <tr key={index}>
-                        <td>{result.testId.name}</td>
-                        <td>{new Date(result.testId.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                        <td>{((result.score / result.totalQuestions) * 100).toFixed(0)}%</td>
-                        <td>{getGrade(result.score, result.totalQuestions)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-        {activeSection === "profile" && (
-          <div className="section">
-            <h3>Profile</h3>
-            {profile && (
-              <div className="profile-details">
-                <p><strong>Name:</strong> {profile.name}</p>
-                <p><strong>Email:</strong> {profile.email}</p>
-                <p><strong>Date of Birth:</strong> {profile.profile.dob}</p>
-                <p><strong>Phone:</strong> {profile.profile.phone}</p>
-                <p><strong>Address:</strong> {profile.profile.address}</p>
-              </div>
-            )}
-          </div>
-        )}
+      <div className="navigation">
+        <button onClick={handlePrevious} disabled={currentQuestion === 0} className="nav-button">
+          Previous
+        </button>
+        <button onClick={handleSkip} disabled={currentQuestion === test.questions.length - 1} className="nav-button">
+          Skip
+        </button>
+        <button onClick={handleNext} disabled={currentQuestion === test.questions.length - 1} className="nav-button">
+          Next
+        </button>
+        <button onClick={handleSubmit} className="submit-button">
+          Submit
+        </button>
       </div>
     </div>
   );

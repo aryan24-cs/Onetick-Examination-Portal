@@ -1,7 +1,22 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
+
+interface Question {
+  questionId: string;
+  question: string;
+  code?: string;
+  options: string[];
+}
+
+interface Test {
+  testId: string;
+  name: string;
+  date: string;
+  duration: number;
+  questions: Question[];
+}
 
 interface DecodedToken {
   id: string;
@@ -12,8 +27,8 @@ interface DecodedToken {
 export default function TestPage() {
   const router = useRouter();
   const params = useParams();
-  const testId = params.testId; // Get testId directly
-  const [test, setTest] = useState<any>(null);
+  const testId = Array.isArray(params.testId) ? params.testId[0] : params.testId; // Handle array or string
+  const [test, setTest] = useState<Test | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -21,7 +36,7 @@ export default function TestPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    console.log("Raw useParams output:", { params, testId }); // Debug params
+    console.log("Test page loaded with params:", { params, testId });
     const token = localStorage.getItem("token");
     const studentId = localStorage.getItem("studentId");
     if (!token || !studentId) {
@@ -30,6 +45,7 @@ export default function TestPage() {
       setTimeout(() => router.push("/"), 2000);
       return;
     }
+
     try {
       const decoded: DecodedToken = jwtDecode(token);
       if (decoded.exp < Math.floor(Date.now() / 1000)) {
@@ -48,21 +64,24 @@ export default function TestPage() {
         setTimeout(() => router.push("/"), 2000);
         return;
       }
+
       const fetchTest = async () => {
+        if (!testId) {
+          console.error("Test ID is undefined or empty", { testId, params });
+          setError("Invalid test ID. Please navigate from the dashboard.");
+          setLoading(false);
+          // setTimeout(() => router.push("/user/dashboard"), 2000);
+          return;
+        }
+Invalid test ID. Please navigate from the dashboard."
+        const cleanTestId = testId.trim();
+        console.log("Fetching test", {
+          testId: cleanTestId,
+          studentId,
+          timestamp: new Date().toISOString(),
+        });
+
         try {
-          const cleanTestId = Array.isArray(testId) ? testId[0]?.trim() : testId?.trim();
-          if (!cleanTestId) {
-            console.error("Test ID is undefined or empty", { testId, params });
-            setError("Invalid test ID. Please navigate from the dashboard.");
-            setLoading(false);
-            setTimeout(() => router.push("/user/dashboard"), 2000);
-            return;
-          }
-          console.log("Fetching test", {
-            testId: cleanTestId,
-            studentId,
-            timestamp: new Date().toISOString(),
-          });
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
           const res = await fetch(`http://localhost:5000/api/student/test/${cleanTestId}`, {
@@ -80,6 +99,7 @@ export default function TestPage() {
             availableTestIds: data.availableTestIds,
             timestamp: new Date().toISOString(),
           });
+
           if (res.ok) {
             console.log("Test loaded successfully:", {
               testId: data.testId,
@@ -91,19 +111,37 @@ export default function TestPage() {
             });
             setTest(data);
             setAnswers(new Array(data.questions?.length || 0).fill(-1));
-            setTimeLeft(data.duration * 60);
+            // Calculate time left based on test start and duration
+            const start = new Date(data.date);
+            const end = new Date(start.getTime() + data.duration * 60 * 1000);
+            const now = new Date();
+            const remainingSeconds = Math.max(0, Math.floor((end.getTime() - now.getTime()) / 1000));
+            if (remainingSeconds === 0) {
+              setError("Test duration has expired.");
+              setLoading(false);
+              // setTimeout(() => router.push("/user/dashboard"), 2000);
+              return;
+            }
+            setTimeLeft(remainingSeconds);
           } else {
-            setError(data.message || "Failed to load test. Please try again or navigate from the dashboard.");
-            console.error("Test fetch failed:", { status: res.status, message: data.message, error: data.error });
+            let errorMessage = data.message || "Failed to load test. Please try again.";
+            if (data.message === "Test already taken") {
+              errorMessage = "You have already completed this test.";
+            } else if (data.message === "Test is not currently active") {
+              errorMessage = "This test is not currently active. Check the test schedule.";
+            } else if (data.message === "Test not found") {
+              errorMessage = "This test does not exist. Please select a test from the dashboard.";
+            }
+            setError(errorMessage);
+            console.error("Test fetch failed:", { status: res.status, message: data.message, error: data.error, availableTestIds: data.availableTestIds });
             setLoading(false);
-            setTimeout(() => router.push("/user/dashboard"), 2000);
+            // setTimeout(() => router.push("/user/dashboard"), 2000);
           }
-          setLoading(false);
         } catch (error: any) {
-          // console.error("Fetch error:", error, { testId: cleanTestId });
+          console.error("Fetch error:", error, { testId: cleanTestId });
           setError(error.name === "AbortError" ? "Request timed out. Please check if the backend server is running." : `An error occurred: ${error.message}`);
           setLoading(false);
-          setTimeout(() => router.push("/user/dashboard"), 2000);
+          // setTimeout(() => router.push("/user/dashboard"), 2000);
         }
       };
       fetchTest();
@@ -117,10 +155,11 @@ export default function TestPage() {
   }, [router, testId]);
 
   useEffect(() => {
-    if (timeLeft > 0) {
+    if (timeLeft > 0 && test) {
       const timer = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
+            console.log("Timer expired, auto-submitting test", { testId });
             handleSubmit();
             return 0;
           }
@@ -129,37 +168,45 @@ export default function TestPage() {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [timeLeft]);
+  }, [timeLeft, test]);
 
-  const handleAnswer = (optionIndex: number) => {
+  const handleAnswer = useCallback((optionIndex: number) => {
     const newAnswers = [...answers];
     newAnswers[currentQuestion] = optionIndex;
     setAnswers(newAnswers);
-  };
+  }, [answers, currentQuestion]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (test && currentQuestion < test.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     }
-  };
+  }, [test, currentQuestion]);
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (currentQuestion > 0) {
       setCurrentQuestion(currentQuestion - 1);
     }
-  };
+  }, [currentQuestion]);
 
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     if (test && currentQuestion < test.questions.length - 1) {
+      const newAnswers = [...answers];
+      newAnswers[currentQuestion] = -1; // Explicitly mark as skipped
+      setAnswers(newAnswers);
       setCurrentQuestion(currentQuestion + 1);
     }
-  };
+  }, [test, currentQuestion, answers]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
+    if (!test) {
+      setError("No test data available for submission.");
+      return;
+    }
+    if (!window.confirm("Are you sure you want to submit the test?")) return;
     try {
       const token = localStorage.getItem("token");
-      const cleanTestId = Array.isArray(testId) ? testId[0]?.trim() : testId?.trim();
-      console.log("Submitting test", { testId: cleanTestId });
+      const cleanTestId = testId?.trim();
+      console.log("Submitting test", { testId: cleanTestId, answers });
       const res = await fetch("http://localhost:5000/api/student/submit", {
         method: "POST",
         headers: {
@@ -173,16 +220,17 @@ export default function TestPage() {
       if (res.ok) {
         router.push("/user/dashboard");
       } else {
-        setError(data.message || "Submission failed");
+        setError(data.message || "Submission failed. Please try again.");
       }
     } catch (error: any) {
       console.error("Submit error:", error);
       setError(`An error occurred during submission: ${error.message}`);
     }
-  };
+  }, [testId, answers, router, test]);
 
   if (loading) return <div className="loading">Loading...</div>;
   if (error) return <div className="error">{error}</div>;
+  if (!test) return <div className="error">No test data available. Please navigate from the dashboard.</div>;
 
   return (
     <div className="test-container">
