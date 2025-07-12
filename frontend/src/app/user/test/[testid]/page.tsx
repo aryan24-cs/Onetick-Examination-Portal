@@ -27,21 +27,23 @@ interface DecodedToken {
 export default function TestPage() {
   const router = useRouter();
   const params = useParams();
-  const testId = Array.isArray(params.testId) ? params.testId[0] : params.testId; // Handle array or string
+  const testId = Array.isArray(params.testid) ? params.testid[0] : params.testid;
   const [test, setTest] = useState<Test | null>(null);
-  const [answers, setAnswers] = useState<number[]>([]);
+  const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    console.log("Test page loaded with params:", { params, testId });
+    console.log("Test page loaded with params:", { params, testId, rawParams: JSON.stringify(params) });
     const token = localStorage.getItem("token");
     const studentId = localStorage.getItem("studentId");
     if (!token || !studentId) {
       setError("Please log in as a student");
       console.error("Authentication error: Missing token or studentId", { token, studentId });
+      setLoading(false);
       setTimeout(() => router.push("/"), 2000);
       return;
     }
@@ -53,6 +55,7 @@ export default function TestPage() {
         console.error("Token expired", { decoded });
         localStorage.removeItem("token");
         localStorage.removeItem("studentId");
+        setLoading(false);
         setTimeout(() => router.push("/"), 2000);
         return;
       }
@@ -61,20 +64,30 @@ export default function TestPage() {
         console.error("Invalid role", { role: decoded.role });
         localStorage.removeItem("token");
         localStorage.removeItem("studentId");
+        setLoading(false);
         setTimeout(() => router.push("/"), 2000);
         return;
       }
 
       const fetchTest = async () => {
-        if (!testId) {
-          console.error("Test ID is undefined or empty", { testId, params });
-          setError("Invalid test ID. Please navigate from the dashboard.");
+        if (!testId || typeof testId !== "string" || testId.trim() === "") {
+          console.error("Test ID is invalid or missing", { testId, params: JSON.stringify(params) });
+          setError("No valid test ID provided. Please select a test from the dashboard.");
           setLoading(false);
-          // setTimeout(() => router.push("/user/dashboard"), 2000);
+          setTimeout(() => router.push("/user/dashboard"), 3000);
           return;
         }
-Invalid test ID. Please navigate from the dashboard."
+
         const cleanTestId = testId.trim();
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(cleanTestId)) {
+          console.error("Invalid test ID format:", { testId: cleanTestId, params: JSON.stringify(params) });
+          setError(`Invalid test ID format: ${cleanTestId}. Please select a test from the dashboard.`);
+          setLoading(false);
+          setTimeout(() => router.push("/user/dashboard"), 3000);
+          return;
+        }
+
         console.log("Fetching test", {
           testId: cleanTestId,
           studentId,
@@ -84,7 +97,7 @@ Invalid test ID. Please navigate from the dashboard."
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
-          const res = await fetch(`http://localhost:5000/api/student/test/${cleanTestId}`, {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/student/test/${cleanTestId}`, {
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
           });
@@ -96,7 +109,6 @@ Invalid test ID. Please navigate from the dashboard."
             message: data.message,
             error: data.error,
             requestedTestId: cleanTestId,
-            availableTestIds: data.availableTestIds,
             timestamp: new Date().toISOString(),
           });
 
@@ -110,38 +122,62 @@ Invalid test ID. Please navigate from the dashboard."
               questionsCount: data.questions?.length || 0,
             });
             setTest(data);
-            setAnswers(new Array(data.questions?.length || 0).fill(-1));
-            // Calculate time left based on test start and duration
+            setAnswers(new Array(data.questions?.length || 0).fill(null));
+            setError(""); // Clear any previous error
             const start = new Date(data.date);
             const end = new Date(start.getTime() + data.duration * 60 * 1000);
             const now = new Date();
+            console.log("Test time check:", {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              now: now.toISOString(),
+              startIST: start.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+              endIST: end.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+              nowIST: now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+            });
             const remainingSeconds = Math.max(0, Math.floor((end.getTime() - now.getTime()) / 1000));
             if (remainingSeconds === 0) {
-              setError("Test duration has expired.");
+              setError(`Test duration has expired. Available from ${start.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} to ${end.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
               setLoading(false);
-              // setTimeout(() => router.push("/user/dashboard"), 2000);
+              setTimeout(() => router.push("/user/dashboard"), 3000);
               return;
             }
             setTimeLeft(remainingSeconds);
+            setLoading(false); // Ensure loading is cleared on success
           } else {
             let errorMessage = data.message || "Failed to load test. Please try again.";
             if (data.message === "Test already taken") {
               errorMessage = "You have already completed this test.";
             } else if (data.message === "Test is not currently active") {
-              errorMessage = "This test is not currently active. Check the test schedule.";
+              errorMessage = `This test is not currently active. It is available from ${new Date(data.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} to ${new Date(data.endTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`;
             } else if (data.message === "Test not found") {
-              errorMessage = "This test does not exist. Please select a test from the dashboard.";
+              errorMessage = `Test with ID ${cleanTestId} does not exist. Please select a valid test from the dashboard.`;
+              try {
+                const testsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/tests`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                const testsData = await testsRes.json();
+                console.log("Available tests:", testsData.map((t: any) => ({ testId: t.testId, name: t.name, date: t.date })));
+              } catch (err) {
+                console.error("Failed to fetch available tests:", err);
+              }
+            } else if (data.message === "Invalid test ID format") {
+              errorMessage = `Invalid test ID format: ${cleanTestId}. Please select a test from the dashboard.`;
             }
             setError(errorMessage);
-            console.error("Test fetch failed:", { status: res.status, message: data.message, error: data.error, availableTestIds: data.availableTestIds });
+            console.error("Test fetch failed:", {
+              status: res.status,
+              message: data.message,
+              error: data.error,
+            });
             setLoading(false);
-            // setTimeout(() => router.push("/user/dashboard"), 2000);
+            setTimeout(() => router.push("/user/dashboard"), 3000);
           }
         } catch (error: any) {
           console.error("Fetch error:", error, { testId: cleanTestId });
           setError(error.name === "AbortError" ? "Request timed out. Please check if the backend server is running." : `An error occurred: ${error.message}`);
           setLoading(false);
-          // setTimeout(() => router.push("/user/dashboard"), 2000);
+          setTimeout(() => router.push("/user/dashboard"), 3000);
         }
       };
       fetchTest();
@@ -150,6 +186,7 @@ Invalid test ID. Please navigate from the dashboard."
       setError("Invalid token. Please log in again.");
       localStorage.removeItem("token");
       localStorage.removeItem("studentId");
+      setLoading(false);
       setTimeout(() => router.push("/"), 2000);
     }
   }, [router, testId]);
@@ -191,23 +228,49 @@ Invalid test ID. Please navigate from the dashboard."
   const handleSkip = useCallback(() => {
     if (test && currentQuestion < test.questions.length - 1) {
       const newAnswers = [...answers];
-      newAnswers[currentQuestion] = -1; // Explicitly mark as skipped
+      newAnswers[currentQuestion] = null;
       setAnswers(newAnswers);
       setCurrentQuestion(currentQuestion + 1);
     }
   }, [test, currentQuestion, answers]);
 
   const handleSubmit = useCallback(async () => {
-    if (!test) {
+    if (submitting || !test) {
       setError("No test data available for submission.");
       return;
     }
-    if (!window.confirm("Are you sure you want to submit the test?")) return;
+    setSubmitting(true);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setError("Session expired. Please log in again.");
+      localStorage.removeItem("token");
+      localStorage.removeItem("studentId");
+      setSubmitting(false);
+      setTimeout(() => router.push("/"), 2000);
+      return;
+    }
     try {
-      const token = localStorage.getItem("token");
+      const decoded: DecodedToken = jwtDecode(token);
+      if (decoded.exp < Math.floor(Date.now() / 1000)) {
+        setError("Session expired. Please log in again.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("studentId");
+        setSubmitting(false);
+        setTimeout(() => router.push("/"), 2000);
+        return;
+      }
+      if (answers.length !== test.questions.length) {
+        setError("Please answer all questions or skip them before submitting.");
+        setSubmitting(false);
+        return;
+      }
+      if (!window.confirm("Are you sure you want to submit the test?")) {
+        setSubmitting(false);
+        return;
+      }
       const cleanTestId = testId?.trim();
       console.log("Submitting test", { testId: cleanTestId, answers });
-      const res = await fetch("http://localhost:5000/api/student/submit", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/student/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,18 +282,51 @@ Invalid test ID. Please navigate from the dashboard."
       console.log("Submit response:", data);
       if (res.ok) {
         router.push("/user/dashboard");
+      } else if (res.status === 401) {
+        setError("Session expired or invalid token. Please log in again.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("studentId");
+        setTimeout(() => router.push("/"), 2000);
       } else {
         setError(data.message || "Submission failed. Please try again.");
       }
     } catch (error: any) {
       console.error("Submit error:", error);
       setError(`An error occurred during submission: ${error.message}`);
+    } finally {
+      setSubmitting(false);
     }
-  }, [testId, answers, router, test]);
+  }, [testId, answers, router, test, submitting]);
 
-  if (loading) return <div className="loading">Loading...</div>;
-  if (error) return <div className="error">{error}</div>;
-  if (!test) return <div className="error">No test data available. Please navigate from the dashboard.</div>;
+  console.log("Render state:", { loading, error, test: test ? { testId: test.testId, name: test.name } : null });
+
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="spinner"></div>
+        <p>Loading test data...</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="error-container">
+        <p className="error-message">{error}</p>
+        {error.includes("Request timed out") && (
+          <button onClick={() => window.location.reload()} className="retry-button">
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (!test) {
+    return (
+      <div className="error-container">
+        <p className="error-message">No test data available. Please select a test from the dashboard.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="test-container">
@@ -263,14 +359,22 @@ Invalid test ID. Please navigate from the dashboard."
         <button onClick={handlePrevious} disabled={currentQuestion === 0} className="nav-button">
           Previous
         </button>
-        <button onClick={handleSkip} disabled={currentQuestion === test.questions.length - 1} className="nav-button">
+        <button
+          onClick={handleSkip}
+          disabled={currentQuestion === test.questions.length - 1}
+          className="nav-button"
+        >
           Skip
         </button>
-        <button onClick={handleNext} disabled={currentQuestion === test.questions.length - 1} className="nav-button">
+        <button
+          onClick={handleNext}
+          disabled={currentQuestion === test.questions.length - 1}
+          className="nav-button"
+        >
           Next
         </button>
-        <button onClick={handleSubmit} className="submit-button">
-          Submit
+        <button onClick={handleSubmit} disabled={submitting} className="submit-button">
+          {submitting ? "Submitting..." : "Submit"}
         </button>
       </div>
     </div>
