@@ -6,15 +6,16 @@ import '../styles/globals.css';
 
 interface LayoutProps {
   children: ReactNode;
+  role: string; // Added role prop to fix TS2322 error
 }
 
-export default function Layout({ children }: LayoutProps) {
+export default function Layout({ children, role }: LayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAdmin = pathname.includes('/admin');
   const isUser = pathname.includes('/user');
-  const role = localStorage.getItem('role');
+  const storedRole = localStorage.getItem('role');
   const profileName = localStorage.getItem(isAdmin ? 'adminEmail' : 'studentName') || (isAdmin ? 'Admin' : 'Student');
   const currentSection = searchParams.get('section') || 'dashboard';
 
@@ -44,10 +45,10 @@ export default function Layout({ children }: LayoutProps) {
           {(isAdmin || isUser) && (
             <aside className="sidebar">
               <div className="profile-section">
-                <div className="avatar" aria-label={`${role} avatar`}></div>
+                <div className="avatar" aria-label={`${storedRole} avatar`}></div>
                 <div>
                   <h1>{profileName}</h1>
-                  <p>{role === 'admin' ? 'Administrator' : 'Student'}</p>
+                  <p>{storedRole === 'admin' ? 'Administrator' : 'Student'}</p>
                 </div>
               </div>
               <nav className="nav-links">

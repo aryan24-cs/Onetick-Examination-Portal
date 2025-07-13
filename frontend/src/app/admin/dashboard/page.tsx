@@ -6,7 +6,7 @@ import Loader from '../../../components/loader';
 import Layout from '../../../components/Layout';
 
 interface Question {
-  questionId: string;
+  questionId?: string; // Made questionId optional
   question: string;
   code?: string;
   options: string[];
@@ -520,10 +520,10 @@ export default function AdminDashboard() {
                 <div key={q.questionId} className="question-card animate-slide-in">
                   <input
                     type="checkbox"
-                    checked={questionIds.includes(q.questionId)}
+                    checked={questionIds.includes(q.questionId!)}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setQuestionIds([...questionIds, q.questionId]);
+                        setQuestionIds([...questionIds, q.questionId!]);
                       } else {
                         setQuestionIds(questionIds.filter((id) => id !== q.questionId));
                       }

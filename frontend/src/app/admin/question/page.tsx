@@ -102,7 +102,7 @@ export default function Questions() {
   };
 
   return (
-    <Layout>
+    <Layout role="admin">
       <div className="questions-container animate-slide-in">
         {loading && <Loader />}
         <h2>Manage Questions</h2>

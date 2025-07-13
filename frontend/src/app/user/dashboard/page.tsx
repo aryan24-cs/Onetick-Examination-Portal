@@ -295,7 +295,7 @@ export default function UserDashboard() {
   }
 
   return (
-    <Layout>
+    <Layout role="user">
       <div className="dashboard-container animate-slide-in">
         <h2>Student Dashboard</h2>
         {error && <p className="error animate-error">{error}</p>}
