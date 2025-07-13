@@ -33,14 +33,26 @@ const connectDB = async () => {
     console.log("MongoDB connected");
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
-    if (adminEmail && adminPassword) {
-       console.log(adminPassword);
-      const existingAdmin = await Admin.findOne({ email: adminEmail });
-      if (!existingAdmin) {
-        const hashedPassword = await bcrypt.hash(adminPassword, 10);
-        const admin = new Admin({ email: adminEmail, password: hashedPassword });
+    if (!adminEmail || !adminPassword) {
+      console.error("Missing ADMIN_EMAIL or ADMIN_PASSWORD in .env");
+      process.exit(1);
+    }
+    console.log("Checking admin account:", { adminEmail });
+    let admin = await Admin.findOne({ email: adminEmail });
+    if (!admin) {
+      console.log("No admin found, creating new admin account");
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      admin = new Admin({ email: adminEmail, password: hashedPassword });
+      await admin.save();
+      console.log(`Admin account created for email: ${adminEmail}`);
+    } else {
+      // Check if the current password matches; if not, update it
+      const isMatch = await bcrypt.compare(adminPassword, admin.password);
+      if (!isMatch) {
+        console.log("Admin password in .env has changed, updating password");
+        admin.password = adminPassword; // Will be hashed by pre-save middleware
         await admin.save();
-        console.log(`Admin account created for email: ${adminEmail}`);
+        console.log(`Admin password updated for email: ${adminEmail}`);
       }
     }
   } catch (error) {
@@ -120,7 +132,7 @@ interface IStudent extends mongoose.Document {
   comparePassword(password: string): Promise<boolean>;
 }
 
-interface IQuestion {
+interface IQuestion extends mongoose.Document {
   questionId: string;
   question: string;
   code?: string;
@@ -133,7 +145,7 @@ interface ITest extends mongoose.Document {
   name: string;
   date: Date;
   duration: number;
-  questions: IQuestion[];
+  questionIds: Types.ObjectId[];
 }
 
 interface IResult extends mongoose.Document {
@@ -144,6 +156,15 @@ interface IResult extends mongoose.Document {
   totalQuestions: number;
 }
 
+// New Question Schema
+const QuestionSchema = new mongoose.Schema({
+  questionId: { type: String, required: true, unique: true },
+  question: { type: String, required: true },
+  code: { type: String, default: "" },
+  options: [{ type: String, required: true }],
+  correctAnswer: { type: Number, required: true },
+});
+
 const AdminSchema = new mongoose.Schema({
   _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
   email: { type: String, required: true, unique: true },
@@ -152,12 +173,14 @@ const AdminSchema = new mongoose.Schema({
 
 AdminSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
+    console.log("Hashing admin password for:", this.email);
     this.password = await bcrypt.hash(this.password, 10);
   }
   next();
 });
 
 AdminSchema.methods.comparePassword = async function (password: string) {
+  console.log("Comparing password for admin:", this.email);
   return bcrypt.compare(password, this.password);
 };
 
@@ -187,15 +210,7 @@ const TestSchema = new mongoose.Schema({
   name: { type: String, required: true },
   date: { type: Date, required: true },
   duration: { type: Number, required: true },
-  questions: [
-    {
-      questionId: { type: String, required: true },
-      question: { type: String, required: true },
-      code: { type: String },
-      options: [{ type: String, required: true }],
-      correctAnswer: { type: Number, required: true },
-    },
-  ],
+  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }],
 });
 
 const ResultSchema = new mongoose.Schema({
@@ -208,6 +223,7 @@ const ResultSchema = new mongoose.Schema({
 
 const Admin = mongoose.model<IAdmin>("Admin", AdminSchema);
 const Student = mongoose.model<IStudent>("Student", StudentSchema);
+const Question = mongoose.model<IQuestion>("Question", QuestionSchema);
 const Test = mongoose.model<ITest>("Test", TestSchema);
 const Result = mongoose.model<IResult>("Result", ResultSchema);
 
@@ -238,17 +254,17 @@ const resetPasswordSchema = Joi.object({
 });
 
 const questionSchema = Joi.object({
-  question: Joi.string().required(),
+  question: Joi.string().min(3).required(),
   code: Joi.string().allow("").optional(),
-  options: Joi.array().items(Joi.string()).min(2).required(),
-  correctAnswer: Joi.number().min(0).required(),
+  options: Joi.array().items(Joi.string().min(1)).min(2).max(10).required(),
+  correctAnswer: Joi.number().min(0).max(9).required(),
 });
 
 const testSchema = Joi.object({
   name: Joi.string().min(3).required(),
   date: Joi.date().iso().required(),
   duration: Joi.number().min(1).required(),
-  questions: Joi.array().items(questionSchema).min(1).required(),
+  questionIds: Joi.array().items(Joi.string()).min(1).required(),
 });
 
 const submitSchema = Joi.object({
@@ -359,7 +375,7 @@ app.post("/api/auth/verify-otp", validate(otpSchema), async (req: Request, res: 
       { expiresIn: "1h" }
     );
     console.log("OTP verified, token generated:", { studentId: student.studentId });
-    res.json({ token, studentId: student.studentId, role: "student" });
+    res.json({ token, studentId: student.studentId, role: "student", name: student.name });
   } catch (error) {
     console.error("OTP verification error:", error);
     res.status(500).json({ message: "OTP verification failed", error: (error as Error).message });
@@ -386,7 +402,7 @@ app.post("/api/auth/login", validate(loginSchema), async (req: Request, res: Res
       { expiresIn: "1h" }
     );
     console.log("Student login successful:", { studentId: student.studentId });
-    res.json({ token, studentId: student.studentId, role: "student" });
+    res.json({ token, studentId: student.studentId, role: "student", name: student.name });
   } catch (error) {
     console.error("Student login error:", error);
     res.status(500).json({ message: "Login failed", error: (error as Error).message });
@@ -396,15 +412,17 @@ app.post("/api/auth/login", validate(loginSchema), async (req: Request, res: Res
 app.post("/api/auth/admin/login", validate(loginSchema), async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
-    console.log("Admin login attempt:", { email });
+    console.log("Admin login attempt:", { email, password: "****" });
     const admin = await Admin.findOne({ email });
     if (!admin) {
-      console.log("Admin not found:", email);
-      return res.status(401).json({ message: "Invalid credentials" });
+      console.log("Admin not found in database:", { email });
+      const admins = await Admin.find().select("email").lean();
+      console.log("Available admin emails in database:", admins.map(a => a.email));
+      return res.status(401).json({ message: "Invalid credentials", availableAdmins: admins.map(a => a.email) });
     }
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      console.log("Password mismatch for admin:", email);
+      console.log("Password mismatch for admin:", { email });
       return res.status(401).json({ message: "Invalid credentials" });
     }
     const token = jwt.sign(
@@ -412,8 +430,8 @@ app.post("/api/auth/admin/login", validate(loginSchema), async (req: Request, re
       process.env.JWT_SECRET || "secret",
       { expiresIn: "1h" }
     );
-    console.log("Admin login successful:", { adminId: admin._id.toString() });
-    res.json({ token, adminId: admin._id.toString(), role: "admin" });
+    console.log("Admin login successful:", { adminId: admin._id.toString(), email });
+    res.json({ token, adminId: admin._id.toString(), role: "admin", email: admin.email });
   } catch (error) {
     console.error("Admin login error:", error);
     res.status(500).json({ message: "Admin login failed", error: (error as Error).message });
@@ -443,17 +461,69 @@ app.post("/api/admin/reset-password", validate(resetPasswordSchema), async (req:
   }
 });
 
-app.post("/api/admin/test", authMiddleware("admin"), validate(testSchema), async (req: Request, res: Response) => {
-  const { name, date, duration, questions } = req.body;
+// New endpoint: Create a single question
+app.post("/api/admin/question", authMiddleware("admin"), validate(questionSchema), async (req: Request, res: Response) => {
+  const { question, code, options, correctAnswer } = req.body;
   try {
-    console.log("Creating test:", { name, date, duration, questionCount: questions.length });
+    console.log("Creating question:", { question, optionsCount: options.length });
+    if (correctAnswer >= options.length) {
+      console.log("Invalid correctAnswer index:", { correctAnswer, optionsLength: options.length });
+      return res.status(400).json({ message: "Correct answer index out of range" });
+    }
+    const questionId = uuidv4();
+    const newQuestion = new Question({
+      questionId,
+      question,
+      code: code || "",
+      options,
+      correctAnswer,
+    });
+    await newQuestion.save();
+    console.log("Question created:", { questionId, question });
+    res.json({ success: true, questionId });
+  } catch (error) {
+    console.error("Question creation error:", error);
+    res.status(400).json({ message: "Question creation failed", error: (error as Error).message });
+  }
+});
+
+// New endpoint: Fetch all questions
+app.get("/api/admin/questions", authMiddleware("admin"), async (req: Request, res: Response) => {
+  try {
+    console.log("Fetching all questions for admin");
+    const questions = await Question.find().lean();
+    console.log("Questions found:", questions.map(q => ({ questionId: q.questionId, question: q.question })));
+    res.json(questions);
+  } catch (error) {
+    console.error("Error fetching questions:", error);
+    res.status(500).json({ message: "Failed to fetch questions", error: (error as Error).message });
+  }
+});
+
+// New endpoint: Fetch all students
+app.get("/api/admin/students", authMiddleware("admin"), async (req: Request, res: Response) => {
+  try {
+    console.log("Fetching all students for admin");
+    const students = await Student.find().select("studentId name email profile").lean();
+    console.log("Students found:", students.map(s => ({ studentId: s.studentId, name: s.name, email: s.email })));
+    res.json(students);
+  } catch (error) {
+    console.error("Error fetching students:", error);
+    res.status(500).json({ message: "Failed to fetch students", error: (error as Error).message });
+  }
+});
+
+app.post("/api/admin/test", authMiddleware("admin"), validate(testSchema), async (req: Request, res: Response) => {
+  const { name, date, duration, questionIds } = req.body;
+  try {
+    console.log("Creating test:", { name, date, duration, questionIds });
     const testDate = new Date(date);
     if (isNaN(testDate.getTime())) {
       console.log("Invalid date format:", date);
       return res.status(400).json({ message: "Invalid date format. Use ISO format (e.g., 2025-07-11T10:20:00.000Z)" });
     }
     const now = new Date();
-    const bufferTime = new Date(testDate.getTime() - 1 * 60 * 1000);
+    const bufferTime = new Date(testDate.getTime() - 5 * 60 * 1000);
     if (now >= bufferTime) {
       console.log("Test creation too close to start time:", {
         provided: testDate.toISOString(),
@@ -462,13 +532,19 @@ app.post("/api/admin/test", authMiddleware("admin"), validate(testSchema), async
       });
       return res.status(400).json({ message: "Test cannot be created within 5 minutes of its start time" });
     }
+    // Validate questionIds
+    const questions = await Question.find({ questionId: { $in: questionIds } });
+    if (questions.length !== questionIds.length) {
+      console.log("Invalid question IDs:", { provided: questionIds, found: questions.map(q => q.questionId) });
+      return res.status(400).json({ message: "One or more question IDs are invalid" });
+    }
     const testId = uuidv4();
     const test = new Test({
       testId,
       name,
       date: testDate,
       duration,
-      questions: questions.map((q: IQuestion) => ({ ...q, questionId: uuidv4() })),
+      questionIds: questions.map(q => q._id),
     });
     await test.save();
     console.log("Test saved to database:", { testId, name, date: testDate.toISOString() });
@@ -484,9 +560,9 @@ app.post("/api/admin/test", authMiddleware("admin"), validate(testSchema), async
   }
 });
 
-// New endpoint for testing test creation without authentication
+// Updated debug endpoint for test creation
 app.post("/api/debug/create-test", async (req: Request, res: Response) => {
-  const { name, date, duration, questions } = req.body;
+  const { name, date, duration, questionIds } = req.body;
   try {
     const { error } = testSchema.validate(req.body);
     if (error) {
@@ -498,13 +574,19 @@ app.post("/api/debug/create-test", async (req: Request, res: Response) => {
       console.log("Invalid date format in debug test creation:", date);
       return res.status(400).json({ message: "Invalid date format" });
     }
+    // Validate questionIds
+    const questions = await Question.find({ questionId: { $in: questionIds } });
+    if (questions.length !== questionIds.length) {
+      console.log("Invalid question IDs in debug test creation:", { provided: questionIds, found: questions.map(q => q.questionId) });
+      return res.status(400).json({ message: "One or more question IDs are invalid" });
+    }
     const testId = uuidv4();
     const test = new Test({
       testId,
       name,
       date: testDate,
       duration,
-      questions: questions.map((q: IQuestion) => ({ ...q, questionId: uuidv4() })),
+      questionIds: questions.map(q => q._id),
     });
     await test.save();
     console.log("Debug test created:", { testId, name, date: testDate.toISOString() });
@@ -518,7 +600,7 @@ app.post("/api/debug/create-test", async (req: Request, res: Response) => {
 app.get("/api/tests", async (req: Request, res: Response) => {
   try {
     console.log("Fetching all tests");
-    const tests = await Test.find().lean();
+    const tests = await Test.find().populate("questionIds").lean();
     console.log("Tests found:", tests.map(t => ({ testId: t.testId, name: t.name, date: t.date.toISOString() })));
     res.json(tests);
   } catch (error) {
@@ -541,7 +623,7 @@ app.get("/api/student/test/:testId", authMiddleware("student"), async (req: Auth
     }
 
     // Check if test exists
-    const test = await Test.findOne({ testId: testId }).lean();
+    const test = await Test.findOne({ testId }).populate("questionIds").lean();
     if (!test) {
       const allTests = await Test.find().select("testId name date").lean();
       console.log("All test IDs in database:", allTests.map(t => ({ testId: t.testId, name: t.name, date: t.date })));
@@ -585,11 +667,16 @@ app.get("/api/student/test/:testId", authMiddleware("student"), async (req: Auth
       name: test.name,
       date: test.date.toISOString(),
       duration: test.duration,
-      questionsCount: test.questions.length,
+      questionsCount: test.questionIds.length,
     });
 
     // Sanitize response to exclude correctAnswer
-    const sanitizedQuestions = test.questions.map(({ correctAnswer, ...rest }) => rest);
+    const sanitizedQuestions = test.questionIds.map((q: any) => ({
+      questionId: q.questionId,
+      question: q.question,
+      code: q.code,
+      options: q.options,
+    }));
     res.json({
       testId: test.testId,
       name: test.name,
@@ -608,7 +695,7 @@ app.post("/api/student/submit", authMiddleware("student"), validate(submitSchema
   const studentId = req.user!.id;
   try {
     console.log("Test submission:", { testId, studentId });
-    const test = await Test.findOne({ testId });
+    const test = await Test.findOne({ testId }).populate("questionIds");
     if (!test) {
       console.log("Test not found:", testId);
       return res.status(404).json({ message: "Test not found" });
@@ -620,7 +707,7 @@ app.post("/api/student/submit", authMiddleware("student"), validate(submitSchema
       return res.status(400).json({ message: "Test duration expired" });
     }
     let score = 0;
-    test.questions.forEach((q: any, i: number) => {
+    test.questionIds.forEach((q: any, i: number) => {
       if (q.correctAnswer === answers[i]) score++;
     });
     const result = new Result({
@@ -628,13 +715,13 @@ app.post("/api/student/submit", authMiddleware("student"), validate(submitSchema
       studentId,
       answers,
       score,
-      totalQuestions: test.questions.length,
+      totalQuestions: test.questionIds.length,
     });
     await result.save();
     const student = await Student.findOne({ studentId });
-    await sendResultNotification(student!.email, test.name, score, test.questions.length);
+    await sendResultNotification(student!.email, test.name, score, test.questionIds.length);
     console.log("Test submitted, result saved:", { testId, studentId, score });
-    res.json({ success: true, score, totalQuestions: test.questions.length });
+    res.json({ success: true, score, totalQuestions: test.questionIds.length });
   } catch (error) {
     console.error("Test submission error:", error);
     res.status(400).json({ message: "Submission failed", error: (error as Error).message });
@@ -648,7 +735,10 @@ app.get("/api/student/results/:studentId", authMiddleware("student"), async (req
   }
   try {
     console.log("Fetching results for student:", req.params.studentId);
-    const results = await Result.find({ studentId: req.params.studentId }).populate("testId");
+    const results = await Result.find({ studentId: req.params.studentId }).populate({
+      path: "testId",
+      select: "testId name date",
+    });
     res.json(results);
   } catch (error) {
     console.error("Error fetching student results:", error);
@@ -663,7 +753,7 @@ app.get("/api/student/profile/:studentId", authMiddleware("student"), async (req
   }
   try {
     console.log("Fetching profile for student:", req.params.studentId);
-    const student = await Student.findOne({ studentId: req.params.studentId });
+    const student = await Student.findOne({ studentId: req.params.studentId }).select("studentId name email profile");
     res.json(student);
   } catch (error) {
     console.error("Error fetching student profile:", error);
@@ -690,7 +780,13 @@ app.put("/api/student/profile/:studentId", authMiddleware("student"), validate(p
 app.get("/api/admin/results", authMiddleware("admin"), async (req: Request, res: Response) => {
   try {
     console.log("Fetching all results for admin");
-    const results = await Result.find().populate("testId").populate("studentId");
+    const results = await Result.find().populate({
+      path: "testId",
+      select: "testId name date",
+    }).populate({
+      path: "studentId",
+      select: "studentId name email",
+    });
     res.json(results);
   } catch (error) {
     console.error("Error fetching admin results:", error);
