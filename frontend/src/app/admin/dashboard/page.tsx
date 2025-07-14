@@ -6,7 +6,7 @@ import Loader from "../../../components/loader";
 import Layout from "../../../components/Layout";
 
 interface Question {
-  questionId?: string; // Made questionId optional
+  questionId?: string;
   question: string;
   code?: string;
   options: string[];
@@ -43,7 +43,9 @@ interface DecodedToken {
 export default function AdminDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const activeSection = searchParams.get("section") || "dashboard";
+  const [activeSection, setActiveSection] = useState(
+    searchParams.get("section") || "dashboard"
+  );
   const [tests, setTests] = useState<Test[]>([]);
   const [ongoingTests, setOngoingTests] = useState<Test[]>([]);
   const [results, setResults] = useState<Result[]>([]);
@@ -69,11 +71,35 @@ export default function AdminDashboard() {
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+  // Update activeSection when searchParams change
+  useEffect(() => {
+    const section = searchParams.get("section") || "dashboard";
+    console.log("Search params changed:", { section });
+    setActiveSection(section);
+  }, [searchParams]);
+
   const isTestOngoing = (test: Test) => {
-    const now = new Date();
     const testStart = new Date(test.date);
+    if (isNaN(testStart.getTime())) {
+      console.error("Invalid test date:", test.date);
+      return false;
+    }
+    const now = new Date();
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     return now >= testStart && now <= testEnd;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      console.error("Invalid date format:", dateString);
+      return "Invalid Date";
+    }
+    return date.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata",
+    });
   };
 
   useEffect(() => {
@@ -82,7 +108,7 @@ export default function AdminDashboard() {
 
     if (!token || !adminId) {
       setError("Please log in as admin");
-      console.log("No token or adminId, redirecting to login");
+      console.error("No token or adminId, redirecting to login");
       setTimeout(() => router.push("/"), 2000);
       return;
     }
@@ -91,7 +117,7 @@ export default function AdminDashboard() {
       const decoded: DecodedToken = jwtDecode(token);
       if (decoded.exp < Math.floor(Date.now() / 1000)) {
         setError("Session expired. Please log in again.");
-        console.log("Token expired:", decoded.exp);
+        console.error("Token expired:", decoded.exp);
         localStorage.removeItem("token");
         localStorage.removeItem("adminId");
         setTimeout(() => router.push("/"), 2000);
@@ -99,7 +125,7 @@ export default function AdminDashboard() {
       }
       if (decoded.role !== "admin") {
         setError("Access denied. Admin role required.");
-        console.log("Invalid role:", decoded.role);
+        console.error("Invalid role:", decoded.role);
         localStorage.removeItem("token");
         localStorage.removeItem("adminId");
         setTimeout(() => router.push("/"), 2000);
@@ -139,6 +165,7 @@ export default function AdminDashboard() {
             test.testId &&
             test.name &&
             test.date &&
+            !isNaN(new Date(test.date).getTime()) &&
             test.duration &&
             test.questionIds
         );
@@ -146,7 +173,9 @@ export default function AdminDashboard() {
         setTests(validTests.filter((test: Test) => !isTestOngoing(test)));
       } catch (err: any) {
         console.error("Fetch tests error:", err.message);
-        setError("Error fetching tests");
+        setError(
+          "Error fetching tests. Please check if the backend server is running."
+        );
       }
     };
 
@@ -170,10 +199,23 @@ export default function AdminDashboard() {
         }
         const data = await res.json();
         console.log("Fetched results:", data);
-        setResults(data);
+        const validResults = data.filter(
+          (result: Result) =>
+            result.testId &&
+            result.testId.name &&
+            result.testId.date &&
+            !isNaN(new Date(result.testId.date).getTime()) &&
+            result.studentId &&
+            result.studentId.name &&
+            result.score !== undefined &&
+            result.totalQuestions
+        );
+        setResults(validResults);
       } catch (err: any) {
         console.error("Fetch results error:", err.message);
-        setError("Error fetching results");
+        setError(
+          "Error fetching results. Please check if the backend server is running."
+        );
       }
     };
 
@@ -205,7 +247,9 @@ export default function AdminDashboard() {
         });
       } catch (err: any) {
         console.error("Fetch metrics error:", err.message);
-        setError("Error fetching metrics");
+        setError(
+          "Error fetching metrics. Please check if the backend server is running."
+        );
       }
     };
 
@@ -232,7 +276,9 @@ export default function AdminDashboard() {
         setAvailableQuestions(data);
       } catch (err: any) {
         console.error("Fetch questions error:", err.message);
-        setError("Error fetching questions");
+        setError(
+          "Error fetching questions. Please check if the backend server is running."
+        );
       }
     };
 
@@ -336,6 +382,10 @@ export default function AdminDashboard() {
     const [year, month, day] = testDate.split("-").map(Number);
     const [hours, minutes] = testTime.split(":").map(Number);
     const localDate = new Date(year, month - 1, day, hours, minutes);
+    if (isNaN(localDate.getTime())) {
+      setError("Invalid date or time provided");
+      return;
+    }
     const isoDate = localDate.toISOString();
 
     try {
@@ -401,9 +451,9 @@ export default function AdminDashboard() {
 
   return (
     <Layout role="admin">
-      <div className="dashboard-container animate-slide-in">
-        <h2>Admin Dashboard</h2>
-        {error && <p className="error animate-error">{error}</p>}
+      <div className="dashboard-container">
+        <h2 className="dashboard-title">Admin Dashboard</h2>
+        {error && <p className="error-message">{error}</p>}
         <div className="tabs">
           <button
             className={activeSection === "dashboard" ? "tab-active" : "tab"}
@@ -438,8 +488,8 @@ export default function AdminDashboard() {
         </div>
         {activeSection === "dashboard" && (
           <div className="section">
-            <h3>Overview</h3>
-            <div className="metrics">
+            <h3 className="section-title">Overview</h3>
+            <div className="metrics-grid">
               <div className="metric-card">
                 <p className="metric-label">Total Students</p>
                 <p className="metric-value">{metrics.totalStudents}</p>
@@ -457,7 +507,7 @@ export default function AdminDashboard() {
         )}
         {activeSection === "createTest" && (
           <div className="section create-test-section">
-            <h3>Create Test</h3>
+            <h3 className="section-title">Create Test</h3>
             <div className="form-group">
               <label htmlFor="testName">Test Name</label>
               <input
@@ -504,7 +554,7 @@ export default function AdminDashboard() {
                 disabled={isLoading}
               />
             </div>
-            <h3>Add Question</h3>
+            <h3 className="section-title">Add Question</h3>
             <div className="form-group">
               <label htmlFor="questionText">Question</label>
               <input
@@ -576,54 +626,55 @@ export default function AdminDashboard() {
             </div>
             <button
               onClick={handleAddQuestion}
-              className="button-success"
+              className="action-button"
               disabled={isLoading}
             >
               Add Question
             </button>
-            <h3>Select Questions for Test</h3>
+            <h3 className="section-title">Select Questions for Test</h3>
             <div className="question-list">
-              {availableQuestions.map((q) => (
-                <div
-                  key={q.questionId}
-                  className="question-card animate-slide-in"
-                >
-                  <input
-                    type="checkbox"
-                    checked={questionIds.includes(q.questionId!)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setQuestionIds([...questionIds, q.questionId!]);
-                      } else {
-                        setQuestionIds(
-                          questionIds.filter((id) => id !== q.questionId)
-                        );
-                      }
-                    }}
-                    disabled={isLoading}
-                  />
-                  <p>
-                    <strong>{q.question}</strong>
-                  </p>
-                  {q.code && <pre className="code-snippet">{q.code}</pre>}
-                  <ul>
-                    {q.options.map((opt, i) => (
-                      <li
-                        key={i}
-                        className={
-                          i === q.correctAnswer ? "correct-option" : ""
+              {availableQuestions.length === 0 ? (
+                <p className="empty-state">No questions available.</p>
+              ) : (
+                availableQuestions.map((q) => (
+                  <div key={q.questionId} className="question-card">
+                    <input
+                      type="checkbox"
+                      checked={questionIds.includes(q.questionId!)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setQuestionIds([...questionIds, q.questionId!]);
+                        } else {
+                          setQuestionIds(
+                            questionIds.filter((id) => id !== q.questionId)
+                          );
                         }
-                      >
-                        {opt}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                      }}
+                      disabled={isLoading}
+                    />
+                    <p>
+                      <strong>{q.question}</strong>
+                    </p>
+                    {q.code && <pre className="code-snippet">{q.code}</pre>}
+                    <ul>
+                      {q.options.map((opt, i) => (
+                        <li
+                          key={i}
+                          className={
+                            i === q.correctAnswer ? "correct-option" : ""
+                          }
+                        >
+                          {opt}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
             </div>
             <button
               onClick={handleCreateTest}
-              className="gradient-button"
+              className="action-button"
               disabled={isLoading || questionIds.length === 0}
             >
               Publish Test
@@ -632,20 +683,15 @@ export default function AdminDashboard() {
         )}
         {activeSection === "ongoingTests" && (
           <div className="section">
-            <h3>Ongoing Tests</h3>
+            <h3 className="section-title">Ongoing Tests</h3>
             <div className="test-list">
               {ongoingTests.length === 0 ? (
-                <p>No ongoing tests available.</p>
+                <p className="empty-state">No ongoing tests available.</p>
               ) : (
                 ongoingTests.map((test) => (
-                  <div key={test.testId} className="test-card animate-slide-in">
+                  <div key={test.testId} className="test-card">
                     <h4>{test.name}</h4>
-                    <p>
-                      Date:{" "}
-                      {new Date(test.date).toLocaleString("en-IN", {
-                        timeZone: "Asia/Kolkata",
-                      })}
-                    </p>
+                    <p>Date: {formatDate(test.date)}</p>
                     <p>Duration: {test.duration} minutes</p>
                     <p>Questions: {test.questionIds.length}</p>
                   </div>
@@ -656,20 +702,15 @@ export default function AdminDashboard() {
         )}
         {activeSection === "tests" && (
           <div className="section">
-            <h3>Previous Tests</h3>
+            <h3 className="section-title">Previous Tests</h3>
             <div className="test-list">
               {tests.length === 0 ? (
-                <p>No previous tests available.</p>
+                <p className="empty-state">No previous tests available.</p>
               ) : (
                 tests.map((test) => (
-                  <div key={test.testId} className="test-card animate-slide-in">
+                  <div key={test.testId} className="test-card">
                     <h4>{test.name}</h4>
-                    <p>
-                      Date:{" "}
-                      {new Date(test.date).toLocaleString("en-IN", {
-                        timeZone: "Asia/Kolkata",
-                      })}
-                    </p>
+                    <p>Date: {formatDate(test.date)}</p>
                     <p>Duration: {test.duration} minutes</p>
                     <p>Questions: {test.questionIds.length}</p>
                   </div>
@@ -680,35 +721,34 @@ export default function AdminDashboard() {
         )}
         {activeSection === "results" && (
           <div className="section">
-            <h3>Results</h3>
+            <h3 className="section-title">Results</h3>
             <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Test</th>
-                    <th>Student</th>
-                    <th>Score</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((result, index) => (
-                    <tr key={index} className="animate-slide-in">
-                      <td>{result.testId.name}</td>
-                      <td>{result.studentId.name}</td>
-                      <td>
-                        {result.score}/{result.totalQuestions}
-                      </td>
-                      <td>
-                        {new Date(result.testId.date).toLocaleDateString(
-                          "en-IN",
-                          { timeZone: "Asia/Kolkata" }
-                        )}
-                      </td>
+              {results.length === 0 ? (
+                <p className="empty-state">No results available.</p>
+              ) : (
+                <table className="dashboard-table">
+                  <thead>
+                    <tr>
+                      <th>Test</th>
+                      <th>Student</th>
+                      <th>Score</th>
+                      <th>Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {results.map((result, index) => (
+                      <tr key={index}>
+                        <td>{result.testId.name || "Unknown Test"}</td>
+                        <td>{result.studentId.name || "Unknown Student"}</td>
+                        <td>
+                          {result.score}/{result.totalQuestions}
+                        </td>
+                        <td>{formatDate(result.testId.date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
