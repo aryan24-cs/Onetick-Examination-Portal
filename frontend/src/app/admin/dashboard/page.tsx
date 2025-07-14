@@ -22,8 +22,8 @@ interface Test {
 }
 
 interface Result {
-  testId: { testId: string; name: string; date: string };
-  studentId: { studentId: string; name: string; email: string };
+  testId: { testId: string; name?: string; date?: string };
+  studentId: { studentId: string; name?: string; email?: string };
   score: number;
   totalQuestions: number;
 }
@@ -71,7 +71,6 @@ export default function AdminDashboard() {
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-  // Update activeSection when searchParams change
   useEffect(() => {
     const section = searchParams.get("section") || "dashboard";
     console.log("Search params changed:", { section });
@@ -89,7 +88,11 @@ export default function AdminDashboard() {
     return now >= testStart && now <= testEnd;
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) {
+      console.warn("Date string is undefined or null");
+      return "No Date";
+    }
     const date = new Date(dateString);
     if (isNaN(date.getTime())) {
       console.error("Invalid date format:", dateString);
@@ -195,26 +198,31 @@ export default function AdminDashboard() {
             throw new Error("Server returned a non-JSON response");
           }
           const data = await res.json();
-          throw new Error(data.message || "Failed to fetch results");
+          throw new Error(
+            data.message || `Failed to fetch results: ${res.status}`
+          );
         }
         const data = await res.json();
-        console.log("Fetched results:", data);
+        console.log("Raw results response:", JSON.stringify(data, null, 2));
         const validResults = data.filter(
           (result: Result) =>
             result.testId &&
-            result.testId.name &&
-            result.testId.date &&
-            !isNaN(new Date(result.testId.date).getTime()) &&
             result.studentId &&
-            result.studentId.name &&
             result.score !== undefined &&
-            result.totalQuestions
+            result.totalQuestions !== undefined
         );
+        console.log("Filtered results:", validResults);
+        if (data.length > 0 && validResults.length === 0) {
+          console.warn("All results filtered out due to missing fields:", data);
+          setError(
+            "Results fetched but filtered out due to missing or invalid fields. Check backend data."
+          );
+        }
         setResults(validResults);
       } catch (err: any) {
         console.error("Fetch results error:", err.message);
         setError(
-          "Error fetching results. Please check if the backend server is running."
+          `Error fetching results: ${err.message}. Please check if the backend server is running.`
         );
       }
     };
@@ -724,7 +732,10 @@ export default function AdminDashboard() {
             <h3 className="section-title">Results</h3>
             <div className="table-container">
               {results.length === 0 ? (
-                <p className="empty-state">No results available.</p>
+                <p className="empty-state">
+                  No results available. Please check if results have been
+                  submitted or if the backend is correctly configured.
+                </p>
               ) : (
                 <table className="dashboard-table">
                   <thead>
@@ -738,8 +749,15 @@ export default function AdminDashboard() {
                   <tbody>
                     {results.map((result, index) => (
                       <tr key={index}>
-                        <td>{result.testId.name || "Unknown Test"}</td>
-                        <td>{result.studentId.name || "Unknown Student"}</td>
+                        <td>
+                          {result.testId.name ||
+                            `Test ID: ${result.testId.testId}`}
+                        </td>
+                        <td>
+                          {result.studentId.name ||
+                            result.studentId.email ||
+                            `Student ID: ${result.studentId.studentId}`}
+                        </td>
                         <td>
                           {result.score}/{result.totalQuestions}
                         </td>

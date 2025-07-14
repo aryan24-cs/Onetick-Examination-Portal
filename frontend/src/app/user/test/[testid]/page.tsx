@@ -128,6 +128,15 @@ export default function TestPage() {
             }
           );
           clearTimeout(timeoutId);
+          const contentType = res.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            const text = await res.text();
+            console.error("Non-JSON response received:", {
+              status: res.status,
+              text: text.slice(0, 100),
+            });
+            throw new Error("Server returned a non-JSON response");
+          }
           const data = await res.json();
           console.log("Backend response:", {
             status: res.status,
@@ -151,7 +160,7 @@ export default function TestPage() {
             });
             setTest(data);
             setAnswers(new Array(data.questions?.length || 0).fill(null));
-            setError(""); // Clear any previous error
+            setError("");
             const start = new Date(data.date);
             const end = new Date(start.getTime() + data.duration * 60 * 1000);
             const now = new Date();
@@ -183,7 +192,7 @@ export default function TestPage() {
               return;
             }
             setTimeLeft(remainingSeconds);
-            setLoading(false); // Ensure loading is cleared on success
+            setLoading(false);
           } else {
             let errorMessage =
               data.message || "Failed to load test. Please try again.";
@@ -199,27 +208,6 @@ export default function TestPage() {
               })}`;
             } else if (data.message === "Test not found") {
               errorMessage = `Test with ID ${cleanTestId} does not exist. Please select a valid test from the dashboard.`;
-              try {
-                const testsRes = await fetch(
-                  `${
-                    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-                  }/api/tests`,
-                  {
-                    headers: { Authorization: `Bearer ${token}` },
-                  }
-                );
-                const testsData = await testsRes.json();
-                console.log(
-                  "Available tests:",
-                  testsData.map((t: any) => ({
-                    testId: t.testId,
-                    name: t.name,
-                    date: t.date,
-                  }))
-                );
-              } catch (err) {
-                console.error("Failed to fetch available tests:", err);
-              }
             } else if (data.message === "Invalid test ID format") {
               errorMessage = `Invalid test ID format: ${cleanTestId}. Please select a test from the dashboard.`;
             }
@@ -260,7 +248,7 @@ export default function TestPage() {
         setTimeLeft((prev) => {
           if (prev <= 1) {
             console.log("Timer expired, auto-submitting test", { testId });
-            handleSubmit(true); // Pass true for auto-submission
+            handleSubmit(true);
             return 0;
           }
           return prev - 1;
@@ -341,7 +329,6 @@ export default function TestPage() {
           setSubmitting(false);
           return;
         }
-        // Only show confirmation for manual submission
         if (
           !isAutoSubmit &&
           !window.confirm("Are you sure you want to submit the test?")
@@ -354,6 +341,7 @@ export default function TestPage() {
           testId: cleanTestId,
           answers,
           isAutoSubmit,
+          timestamp: new Date().toISOString(),
         });
         const res = await fetch(
           `${
@@ -368,10 +356,41 @@ export default function TestPage() {
             body: JSON.stringify({ testId: cleanTestId, answers }),
           }
         );
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Non-JSON response received:", {
+            status: res.status,
+            text: text.slice(0, 100),
+          });
+          throw new Error("Server returned a non-JSON response");
+        }
         const data = await res.json();
-        console.log("Submit response:", data);
+        console.log("Submit response:", {
+          status: res.status,
+          data,
+          timestamp: new Date().toISOString(),
+        });
         if (res.ok) {
-          router.push("/user/dashboard");
+          console.log("Test submitted successfully, storing result:", {
+            testId: cleanTestId,
+            testName: data.testName,
+            score: data.score,
+            totalQuestions: data.totalQuestions,
+          });
+          localStorage.setItem(
+            "testResult",
+            JSON.stringify({
+              testId: cleanTestId,
+              testName: data.testName,
+              score: data.score,
+              totalQuestions: data.totalQuestions,
+            })
+          );
+          setTimeout(() => {
+            console.log("Navigating to result page");
+            router.push("/user/test/result");
+          }, 500); // Slight delay to ensure state updates
         } else if (res.status === 401) {
           if (!isAutoSubmit) {
             setError("Session expired or invalid token. Please log in again.");
@@ -383,6 +402,11 @@ export default function TestPage() {
           if (!isAutoSubmit) {
             setError(data.message || "Submission failed. Please try again.");
           }
+          console.error("Submission failed:", {
+            status: res.status,
+            message: data.message,
+            error: data.error,
+          });
         }
       } catch (error: any) {
         console.error("Submit error:", error);
@@ -395,12 +419,6 @@ export default function TestPage() {
     },
     [testId, answers, router, test, submitting]
   );
-
-  console.log("Render state:", {
-    loading,
-    error,
-    test: test ? { testId: test.testId, name: test.name } : null,
-  });
 
   if (loading) {
     return (
@@ -439,7 +457,7 @@ export default function TestPage() {
     <div className="test-container">
       <h2>{test.name}</h2>
       <div className="timer">
-        Time Left: {Math.floor(timeLeft / 60)}:
+        Time Left: {Math.floor(timeLeft / 60)} nhi
         {(timeLeft % 60).toString().padStart(2, "0")}
       </div>
       <div className="question-card">
@@ -453,19 +471,17 @@ export default function TestPage() {
           </pre>
         )}
         <div className="options">
-          {test.questions[currentQuestion].options.map(
-            (opt: string, i: number) => (
-              <label key={i} className="option">
-                <input
-                  type="radio"
-                  name={`question-${currentQuestion}`}
-                  checked={answers[currentQuestion] === i}
-                  onChange={() => handleAnswer(i)}
-                />
-                {opt}
-              </label>
-            )
-          )}
+          {test.questions[currentQuestion].options.map((opt: string, i: number) => (
+            <label key={i} className="option">
+              <input
+                type="radio"
+                name={`question-${currentQuestion}`}
+                checked={answers[currentQuestion] === i}
+                onChange={() => handleAnswer(i)}
+              />
+              {opt}
+            </label>
+          ))}
         </div>
       </div>
       <div className="navigation">
