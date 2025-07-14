@@ -112,7 +112,7 @@ export default function Home() {
       <div className="login-container animate-slide-in">
         <h2>Login to Your Account</h2>
         {error && <p className="error animate-error">{error}</p>}
-        {/*<div className="form-group">
+        <div className="form-group">
           <label htmlFor="role">Role</label>
           <select
             id="role"
@@ -124,7 +124,7 @@ export default function Home() {
             <option value="student">Student</option>
             <option value="admin">Admin</option>
           </select>
-        </div>*/}
+        </div>
         <div className="form-group">
           <label htmlFor="email">Email</label>
           <input
