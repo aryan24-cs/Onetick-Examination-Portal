@@ -6,7 +6,7 @@
 }
 
 body {
-  font-family: 'Public Sans', 'Noto Sans', sans-serif;
+  font-family: "Public Sans", "Noto Sans", sans-serif;
   background-color: #f7f8fa;
   color: #101418;
   min-height: 100vh;
@@ -92,7 +92,7 @@ body {
   height: 40px;
   border-radius: 50%;
   background-color: #eaedf1;
-  background-image: url('https://via.placeholder.com/40');
+  background-image: url("https://via.placeholder.com/40");
   background-size: cover;
   background-position: center;
 }
@@ -366,7 +366,7 @@ h4 {
   color: #fff;
   padding: 10px;
   border-radius: 4px;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: "Courier New", Courier, monospace;
   white-space: pre-wrap;
   margin: 10px 0;
 }
@@ -463,6 +463,7 @@ tr:hover {
 .profile-section {
   margin-bottom: 32px;
   width: 100%;
+  flex-direction: column;
 }
 
 .profile-container {
