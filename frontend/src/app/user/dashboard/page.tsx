@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import Loader from "../../../components/loader";
 import Layout from "../../../components/Layout";
+import '../../../styles/userdashboard.css'
 
 interface Test {
   testId: string;

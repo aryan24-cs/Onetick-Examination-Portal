@@ -73,7 +73,8 @@
   overflow-x: auto;
 }
 
-table, .dashboard-table {
+table,
+.dashboard-table {
   width: 100%;
   border-collapse: collapse;
 }
@@ -147,7 +148,8 @@ tr:hover {
 }
 
 /* Error Messages */
-.error-message, .error {
+.error-message,
+.error {
   color: #dc2626;
   font-size: 14px;
   font-weight: 500;
@@ -195,7 +197,7 @@ tr:hover {
 }
 
 .action-button.take-test-btn::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;

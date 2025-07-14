@@ -6,7 +6,7 @@
 }
 
 body {
-  font-family: 'Public Sans', 'Noto Sans', sans-serif;
+  font-family: "Public Sans", "Noto Sans", sans-serif;
   background-color: #f7f8fa;
   color: #101418;
   min-height: 100vh;
@@ -42,7 +42,8 @@ body {
 }
 
 @keyframes error-shake {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
   25% {
@@ -152,7 +153,7 @@ body {
   height: 56px;
   border-radius: 50%;
   background-color: #eaedf1;
-  background-image: url('https://via.placeholder.com/40');
+  background-image: url("https://via.placeholder.com/40");
   background-size: cover;
   background-position: center;
   border: 2px solid #10b981;
@@ -220,7 +221,7 @@ body {
 }
 
 .edit-profile-btn::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -259,7 +260,7 @@ body {
 }
 
 .remove-photo-btn::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -351,7 +352,7 @@ body {
 
 .button-success::after,
 .submit-button::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -426,7 +427,7 @@ body {
 }
 
 .nav-button::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
