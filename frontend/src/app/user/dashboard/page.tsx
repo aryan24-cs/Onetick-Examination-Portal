@@ -12,7 +12,7 @@ interface Test {
   name: string;
   date: Date | string;
   duration: number;
-  questions: any[];
+  // questions: any[];
 }
 
 interface Result {
@@ -410,6 +410,10 @@ export default function UserDashboard() {
     router.push(`/user/test/${encodeURIComponent(cleanTestId)}`);
   };
 
+  const handleBackToDashboard = () => {
+    router.push("/user/dashboard?section=dashboard");
+  };
+
   const { totalTests, averageScore, overallGrade } = calculateMetrics();
 
   if (isLoading) {
@@ -595,7 +599,7 @@ export default function UserDashboard() {
                             }
                             className={`action-button take-test-btn ${
                               isTestActive(test) ? "" : "disabled"
-                              }`}
+                            }`}
                             disabled={!isTestActive(test)}
                             title={getTestStatus(test)}
                           >
@@ -637,11 +641,7 @@ export default function UserDashboard() {
                           )}
                         </td>
                         <td>
-                          {(
-                            (result.score / result.totalQuestions) *
-                            100
-                          ).toFixed(0)}
-                          %
+                          {((result.score / result.totalQuestions) * 100).toFixed(0)}%
                         </td>
                         <td>{getGrade(result.score, result.totalQuestions)}</td>
                       </tr>
@@ -653,25 +653,61 @@ export default function UserDashboard() {
           </div>
         )}
         {activeSection === "profile" && (
-          <div className="section profile-section">
+          <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
             <h3 className="section-title">Profile</h3>
             {profile && (
               <div className="profile-details">
-                <p>
-                  <strong>Name:</strong> {profile.name}
-                </p>
-                <p>
-                  <strong>Email:</strong> {profile.email}
-                </p>
-                <p>
-                  <strong>Date of Birth:</strong> {profile.profile.dob}
-                </p>
-                <p>
-                  <strong>Phone:</strong> {profile.profile.phone}
-                </p>
-                <p>
-                  <strong>Address:</strong> {profile.profile.address}
-                </p>
+                <div className="profile-edit-section">
+                  <div className="avatar" style={{ backgroundImage: profilePic ? `url(${profilePic})` : undefined }}></div>
+                  <div className="profile-upload-container">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="profile-upload"
+                      id="profile-upload"
+                      onChange={handleProfilePicChange}
+                    />
+                    <label htmlFor="profile-upload" className="edit-profile-btn">
+                      Upload Photo
+                    </label>
+                    {profilePic && (
+                      <button
+                        onClick={handleRemovePhoto}
+                        className="remove-photo-btn"
+                      >
+                        Remove Photo
+                      </button>
+                    )}
+                    {uploadError && <p className="error-message animate-error">{uploadError}</p>}
+                  </div>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.2s" }}>
+                  <span className="profile-label">Name:</span>
+                  <span className="profile-value">{profile.name}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.3s" }}>
+                  <span className="profile-label">Email:</span>
+                  <span className="profile-value">{profile.email}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.4s" }}>
+                  <span className="profile-label">Date of Birth:</span>
+                  <span className="profile-value">{profile.profile.dob}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.5s" }}>
+                  <span className="profile-label">Phone:</span>
+                  <span className="profile-value">{profile.profile.phone}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.6s" }}>
+                  <span className="profile-label">Address:</span>
+                  <span className="profile-value">{profile.profile.address}</span>
+                </div>
+                <button
+                  onClick={handleBackToDashboard}
+                  className="nav-button"
+                  style={{ marginTop: "16px" }}
+                >
+                  Back to Dashboard
+                </button>
               </div>
             )}
           </div>
