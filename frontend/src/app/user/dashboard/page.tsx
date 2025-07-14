@@ -14,7 +14,7 @@ interface Test {
 }
 
 interface Result {
-  testId: { testId: string; name: string; date: Date };
+  testId?: { testId: string; name: string; date: Date };
   score: number;
   totalQuestions: number;
 }
@@ -44,7 +44,6 @@ export default function UserDashboard() {
     searchParams.get("section") || "dashboard"
   );
 
-  // Update activeSection when searchParams change
   useEffect(() => {
     const section = searchParams.get("section") || "dashboard";
     console.log("Search params changed:", { section });
@@ -562,7 +561,7 @@ export default function UserDashboard() {
                             }
                             className={`action-button ${
                               isTestActive(test) ? "" : "disabled"
-                              }`}
+                            }`}
                             disabled={!isTestActive(test)}
                             title={getTestStatus(test)}
                           >
@@ -598,20 +597,27 @@ export default function UserDashboard() {
                   <tbody>
                     {results.map((result, index) => (
                       <tr key={index}>
-                        <td>{result.testId.name}</td>
+                        <td>{result.testId ? result.testId.name : "Unknown Test"}</td>
                         <td>
-                          {new Date(result.testId.date).toLocaleDateString(
-                            "en-IN",
-                            { timeZone: "Asia/Kolkata" }
+                          {result.testId ? (
+                            new Date(result.testId.date).toLocaleDateString(
+                              "en-IN",
+                              { timeZone: "Asia/Kolkata" }
+                            )
+                          ) : (
+                            "N/A"
                           )}
                         </td>
                         <td>
-                          {(
-                            (result.score / result.totalQuestions) * 100
-                          ).toFixed(0)}
-                          %
+                          {result.totalQuestions > 0
+                            ? ((result.score / result.totalQuestions) * 100).toFixed(0) + "%"
+                            : "N/A"}
                         </td>
-                        <td>{getGrade(result.score, result.totalQuestions)}</td>
+                        <td>
+                          {result.totalQuestions > 0
+                            ? getGrade(result.score, result.totalQuestions)
+                            : "N/A"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
