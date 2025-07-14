@@ -5,6 +5,7 @@ import Link from "next/link";
 import Loader from "../../components/loader";
 
 export default function Register() {
+  const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +18,7 @@ export default function Register() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const validateForm = () => {
+  const validateStep1 = () => {
     if (!name || name.length < 3) {
       setError("Name must be at least 3 characters");
       return false;
@@ -30,6 +31,10 @@ export default function Register() {
       setError("Password must be at least 6 characters");
       return false;
     }
+    return true;
+  };
+
+  const validateStep2 = () => {
     if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
       setError("Please enter a valid date of birth (YYYY-MM-DD)");
       return false;
@@ -53,8 +58,22 @@ export default function Register() {
     return true;
   };
 
+  const handleNextStep = () => {
+    if (step === 1 && validateStep1()) {
+      setError("");
+      setStep(2);
+    } else if (step === 2 && validateStep2()) {
+      setError("");
+      setStep(3);
+    }
+  };
+
+  const handlePreviousStep = () => {
+    setError("");
+    setStep(step - 1);
+  };
+
   const handleRegister = async () => {
-    if (!validateForm()) return;
     setLoading(true);
     setError("");
 
@@ -72,7 +91,6 @@ export default function Register() {
 
       console.log("Register response status:", { status: res.status, statusText: res.statusText });
 
-      // Check Content-Type to avoid parsing HTML as JSON
       const contentType = res.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const text = await res.text();
@@ -156,104 +174,193 @@ export default function Register() {
     <div className="register-page">
       {loading && <Loader />}
       <div className="register-container animate-slide-in">
-        <h2>{showOtp ? "Verify OTP" : "Register Your Account"}</h2>
+        <h2 className="animate-slide-in">
+          {showOtp ? "Verify OTP" : step === 3 ? "Review Your Details" : "Create Your Account"}
+        </h2>
         {error && <p className="error animate-error">{error}</p>}
         {!showOtp ? (
           <>
-            <div className="form-group">
-              <label htmlFor="name">Name</label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                aria-label="Name"
+            {step === 1 && (
+              <div className="form-column">
+                <div className="form-group animate-slide-in" style={{ animationDelay: "0.1s" }}>
+                  <label htmlFor="name">Full Name</label>
+                  <input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your full name"
+                    aria-label="Full name"
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group animate-slide-in" style={{ animationDelay: "0.2s" }}>
+                  <label htmlFor="email">Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    aria-label="Email address"
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group animate-slide-in" style={{ animationDelay: "0.3s" }}>
+                  <label htmlFor="password">Password</label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    aria-label="Password"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+            {step === 2 && (
+              <div className="form-column">
+                <div className="form-group animate-slide-in" style={{ animationDelay: "0.1s" }}>
+                  <label htmlFor="dob">Date of Birth</label>
+                  <input
+                    id="dob"
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    aria-label="Date of birth"
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group animate-slide-in" style={{ animationDelay: "0.2s" }}>
+                  <label htmlFor="phone">Phone Number</label>
+                  <input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Enter your phone number"
+                    aria-label="Phone number"
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group animate-slide-in" style={{ animationDelay: "0.3s" }}>
+                  <label htmlFor="address">Address</label>
+                  <textarea
+                    id="address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Enter your address"
+                    aria-label="Address"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+            {step === 2 && (
+              <div className="button-group animate-slide-in" style={{ animationDelay: "0.4s" }}>
+                <button
+                  onClick={handlePreviousStep}
+                  disabled={loading}
+                  className="gradient-button secondary-button"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={handleNextStep}
+                  disabled={loading}
+                  className="gradient-button"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+            {step === 3 && (
+              <div className="review-section animate-slide-in" style={{ animationDelay: "0.1s" }}>
+                <h3>Review Your Information</h3>
+                <div className="review-details">
+                  <div className="review-item">
+                    <span className="review-label">Name:</span>
+                    <span className="review-value">{name}</span>
+                  </div>
+                  <div className="review-item">
+                    <span className="review-label">Email:</span>
+                    <span className="review-value">{email}</span>
+                  </div>
+                  <div className="review-item">
+                    <span className="review-label">Password:</span>
+                    <span className="review-value">{password.replace(/./g, '*')}</span>
+                  </div>
+                  <div className="review-item">
+                    <span className="review-label">Date of Birth:</span>
+                    <span className="review-value">{dob}</span>
+                  </div>
+                  <div className="review-item">
+                    <span className="review-label">Phone Number:</span>
+                    <span className="review-value">{phone}</span>
+                  </div>
+                  <div className="review-item">
+                    <span className="review-label">Address:</span>
+                    <span className="review-value">{address}</span>
+                  </div>
+                </div>
+                <div className="button-group animate-slide-in" style={{ animationDelay: "0.2s" }}>
+                  <button
+                    onClick={handlePreviousStep}
+                    disabled={loading}
+                    className="gradient-button secondary-button"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={handleRegister}
+                    disabled={loading}
+                    className="gradient-button"
+                  >
+                    {loading ? "Registering..." : "Register"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {step === 1 && (
+              <button
+                onClick={handleNextStep}
                 disabled={loading}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                aria-label="Email address"
-                disabled={loading}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                aria-label="Password"
-                disabled={loading}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="dob">Date of Birth</label>
-              <input
-                id="dob"
-                type="date"
-                value={dob}
-                onChange={(e) => setDob(e.target.value)}
-                aria-label="Date of birth"
-                disabled={loading}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="phone">Phone</label>
-              <input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Enter your phone number"
-                aria-label="Phone number"
-                disabled={loading}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="address">Address</label>
-              <textarea
-                id="address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Enter your address"
-                aria-label="Address"
-                disabled={loading}
-              />
-            </div>
-            <button onClick={handleRegister} disabled={loading} className="gradient-button">
-              {loading ? "Registering..." : "Register"}
-            </button>
+                className="gradient-button animate-slide-in"
+                style={{ animationDelay: "0.4s" }}
+              >
+                Next
+              </button>
+            )}
           </>
         ) : (
-          <>
+          <div className="otp-section animate-slide-in" style={{ animationDelay: "0.1s" }}>
+            <p className="otp-info">An OTP has been sent to {email}. Please check your inbox or spam folder.</p>
             <div className="form-group">
-              <label htmlFor="otp">OTP</label>
+              <label htmlFor="otp">Enter OTP</label>
               <input
                 id="otp"
                 type="text"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter the 6-digit OTP"
+                placeholder="Enter 6-digit OTP"
                 aria-label="OTP"
                 disabled={loading}
+                maxLength={6}
               />
             </div>
-            <button onClick={handleVerifyOtp} disabled={loading} className="gradient-button">
+            <button
+              onClick={handleVerifyOtp}
+              disabled={loading}
+              className="gradient-button animate-slide-in"
+              style={{ animationDelay: "0.2s" }}
+            >
               {loading ? "Verifying..." : "Verify OTP"}
             </button>
-          </>
+          </div>
         )}
-        <p className="link-text">
+        <p className="link-text animate-slide-in" style={{ animationDelay: "0.5s" }}>
           Already have an account? <Link href="/">Login</Link>
         </p>
       </div>
