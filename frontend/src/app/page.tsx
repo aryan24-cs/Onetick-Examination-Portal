@@ -1,8 +1,8 @@
 "use client";
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Layout from '../components/Layout';
 import Link from 'next/link';
+import Loader from '../components/loader';
 
 export default function Home() {
   const [email, setEmail] = useState('');
@@ -12,20 +12,53 @@ export default function Home() {
   const [error, setError] = useState('');
   const router = useRouter();
 
+  const validateForm = () => {
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    if (!password || password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return false;
+    }
+    return true;
+  };
+
   const handleLogin = async () => {
+    if (!validateForm()) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     const endpoint = role === 'admin' ? '/api/auth/admin/login' : '/api/auth/login';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    const url = `${baseUrl}${endpoint}`;
+
+    console.log('Attempting login with:', { email, role, url });
+
     try {
-      console.log('Attempting login with:', { email, role, password: '****' });
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ email, password }),
       });
+
+      console.log('Login response status:', { status: res.status, statusText: res.statusText });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Non-JSON response received:', { status: res.status, text: text.slice(0, 100) });
+        throw new Error('Server returned a non-JSON response. Please check the API URL and server status.');
+      }
+
       const data = await res.json();
-      console.log('Login response:', { status: res.status, data });
-      setLoading(false);
+      console.log('Login response data:', data);
+
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('role', data.role);
@@ -36,8 +69,14 @@ export default function Home() {
             return;
           }
           localStorage.setItem('studentId', data.studentId);
-          console.log('Stored in localStorage:', { token: data.token, studentId: data.studentId, role: data.role });
-          router.push('/user/dashboard');
+          localStorage.setItem('studentName', data.name || email);
+          console.log('Stored in localStorage:', {
+            token: data.token,
+            studentId: data.studentId,
+            role: data.role,
+            studentName: data.name || email,
+          });
+          router.push('/user/dashboard?section=tests');
         } else {
           if (!data.adminId) {
             setError('No admin ID returned. Please try again.');
@@ -45,60 +84,77 @@ export default function Home() {
             return;
           }
           localStorage.setItem('adminId', data.adminId);
-          console.log('Stored in localStorage:', { token: data.token, adminId: data.adminId, role: data.role });
-          router.push('/admin/dashboard');
+          localStorage.setItem('adminEmail', data.email || email);
+          console.log('Stored in localStorage:', {
+            token: data.token,
+            adminId: data.adminId,
+            role: data.role,
+            adminEmail: data.email || email,
+          });
+          router.push('/admin/dashboard?section=metrics');
         }
-        setTimeout(() => {
-          router.refresh();
-        }, 100);
       } else {
         setError(data.message || 'Login failed. Invalid credentials.');
         console.log('Login failed with message:', data.message);
       }
-    } catch (error) {
-      console.error('Login error:', error);
+    } catch (error: any) {
+      console.error('Login error:', error.message);
+      setError(error.message || 'An error occurred during login. Please try again.');
+    } finally {
       setLoading(false);
-      setError('An error occurred during login. Please try again.');
     }
   };
 
   return (
-    <Layout>
-      <div className="login-container">
-        <h2>Login</h2>
-        {error && <p className="error">{error}</p>}
+    <div className="login-page">
+      {loading && <Loader />}
+      <div className="login-container animate-slide-in">
+        <h2>Login to Your Account</h2>
+        {error && <p className="error animate-error">{error}</p>}
         <div className="form-group">
-          <label>Role</label>
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
+          <label htmlFor="role">Role</label>
+          <select
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            aria-label="Select role"
+            disabled={loading}
+          >
             <option value="student">Student</option>
             <option value="admin">Admin</option>
           </select>
         </div>
         <div className="form-group">
-          <label>Email</label>
+          <label htmlFor="email">Email</label>
           <input
+            id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email"
+            aria-label="Email address"
+            disabled={loading}
           />
         </div>
         <div className="form-group">
-          <label>Password</label>
+          <label htmlFor="password">Password</label>
           <input
+            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter your password"
+            aria-label="Password"
+            disabled={loading}
           />
         </div>
-        <button onClick={handleLogin} disabled={loading} className={loading ? 'button-disabled' : ''}>
-          {loading ? 'Loading...' : 'Login'}
+        <button onClick={handleLogin} disabled={loading} className="gradient-button">
+          {loading ? 'Logging in...' : 'Login'}
         </button>
         <p className="link-text">
           Don’t have an account? <Link href="/register">Register</Link>
         </p>
       </div>
-    </Layout>
+    </div>
   );
 }
