@@ -200,6 +200,16 @@ body {
   background: linear-gradient(135deg, #e6f0fa 0%, #f7f8fa 100%);
 }
 
+.dashboard-container{
+  flex-direction: column;
+  justify-content: start !important;
+  /* align-items: start !important; */
+}
+
+.questions-container{
+  flex-direction: column;
+}
+
 .login-container,
 .register-container,
 .questions-container,
@@ -422,6 +432,7 @@ h4 {
   background-color: #f7f8fa;
   border-radius: 8px;
   margin-bottom: 20px;
+  width: 60%;
 }
 
 .option-input {
