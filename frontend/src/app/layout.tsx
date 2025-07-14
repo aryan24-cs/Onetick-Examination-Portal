@@ -6,7 +6,7 @@ interface LayoutProps {
   role: string; // Added role prop to fix TS2322 error
 }
 
-export default function RootLayout({ children, role }: LayoutProps) {
+export default function RootLayout({ children,}: LayoutProps) {
   return (
     <html lang="en">
       <body>{children}</body>

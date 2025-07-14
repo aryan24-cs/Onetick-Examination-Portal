@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
+import '../../../../styles/test.css'
 
 interface Question {
   questionId: string;
@@ -403,7 +404,7 @@ export default function TestPage() {
 
   if (loading) {
     return (
-      <div className="loading-container">
+      <div className="loader">
         <div className="spinner"></div>
         <p>Loading test data...</p>
       </div>

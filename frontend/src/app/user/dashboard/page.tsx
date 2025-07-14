@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import Loader from "../../../components/loader";
 import Layout from "../../../components/Layout";
+import '../../../styles/userdashboard.css'
+// import '../../../styles/global.css'
 
 interface Test {
   testId: string;
@@ -43,6 +45,53 @@ export default function UserDashboard() {
   const [activeSection, setActiveSection] = useState(
     searchParams.get("section") || "dashboard"
   );
+  const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string>("");
+
+  // Load profile picture from localStorage on mount
+  useEffect(() => {
+    const savedPic = localStorage.getItem("profilePic");
+    if (savedPic) {
+      setProfilePic(savedPic);
+    }
+  }, []);
+
+  // Handle profile picture upload with validation
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please upload a valid image file (e.g., JPG, PNG).");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Image size must be less than 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setProfilePic(result);
+      localStorage.setItem("profilePic", result);
+      setUploadError("");
+    };
+    reader.onerror = () => {
+      setUploadError("Failed to read the image file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle remove profile picture
+  const handleRemovePhoto = () => {
+    setProfilePic(null);
+    localStorage.removeItem("profilePic");
+    setUploadError("");
+  };
 
   // Update activeSection when searchParams change
   useEffect(() => {
@@ -361,17 +410,6 @@ export default function UserDashboard() {
     router.push(`/user/test/${encodeURIComponent(cleanTestId)}`);
   };
 
-  const calculateAge = (dob: string) => {
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age.toString();
-  };
-
   const { totalTests, averageScore, overallGrade } = calculateMetrics();
 
   if (isLoading) {
@@ -379,30 +417,30 @@ export default function UserDashboard() {
   }
 
   return (
-    <Layout role="user">
-      <div className="dashboard-container">
+    <Layout role="user" profilePic={profilePic}>
+      <div className="dashboard-container animate-slide-in">
         <h2 className="dashboard-title">Student Dashboard</h2>
-        {error && <p className="error-message">{error}</p>}
+        {error && <p className="error-message animate-error">{error}</p>}
         {activeSection === "dashboard" && (
           <>
-            <div className="section performance-overview">
+            <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
               <h3 className="section-title">Performance Overview</h3>
               <div className="metrics-grid">
-                <div className="metric-card">
+                <div className="metric-card animate-slide-in" style={{ animationDelay: "0.2s" }}>
                   <p className="metric-label">Overall Grade</p>
                   <p className="metric-value">{overallGrade}</p>
                 </div>
-                <div className="metric-card">
+                <div className="metric-card animate-slide-in" style={{ animationDelay: "0.3s" }}>
                   <p className="metric-label">Average Score</p>
                   <p className="metric-value">{averageScore}</p>
                 </div>
-                <div className="metric-card">
+                <div className="metric-card animate-slide-in" style={{ animationDelay: "0.4s" }}>
                   <p className="metric-label">Tests Taken</p>
                   <p className="metric-value">{totalTests}</p>
                 </div>
               </div>
             </div>
-            <div className="section">
+            <div className="section animate-slide-in" style={{ animationDelay: "0.2s" }}>
               <h3 className="section-title">Ongoing Tests</h3>
               <div className="table-container">
                 {ongoingTests.length === 0 ? (
@@ -420,7 +458,7 @@ export default function UserDashboard() {
                     </thead>
                     <tbody>
                       {ongoingTests.map((test) => (
-                        <tr key={test.testId}>
+                        <tr key={test.testId} className="animate-slide-in">
                           <td>{test.name}</td>
                           <td>
                             {new Date(test.date).toLocaleDateString("en-IN", {
@@ -440,15 +478,13 @@ export default function UserDashboard() {
                               onClick={() =>
                                 handleTakeTestClick(test.testId, test.name)
                               }
-                              className={`action-button ${
+                              className={`action-button take-test-btn ${
                                 isTestActive(test) ? "" : "disabled"
                               }`}
                               disabled={!isTestActive(test)}
                               title={getTestStatus(test)}
                             >
-                              {isTestActive(test)
-                                ? "Take Test"
-                                : "Not Available"}
+                              {isTestActive(test) ? "Take Test" : "Not Available"}
                             </button>
                           </td>
                         </tr>
@@ -458,11 +494,10 @@ export default function UserDashboard() {
                 )}
               </div>
             </div>
-            <div className="section">
+            <div className="section animate-slide-in" style={{ animationDelay: "0.3s" }}>
               <h3 className="section-title">Upcoming Tests</h3>
               <div className="table-container">
-                {tests.filter((test) => new Date(test.date) > new Date())
-                  .length === 0 ? (
+                {tests.filter((test) => new Date(test.date) > new Date()).length === 0 ? (
                   <p className="empty-state">No upcoming tests available.</p>
                 ) : (
                   <table className="dashboard-table">
@@ -479,7 +514,7 @@ export default function UserDashboard() {
                       {tests
                         .filter((test) => new Date(test.date) > new Date())
                         .map((test) => (
-                          <tr key={test.testId}>
+                          <tr key={test.testId} className="animate-slide-in">
                             <td>{test.name}</td>
                             <td>
                               {new Date(test.date).toLocaleDateString("en-IN", {
@@ -499,15 +534,13 @@ export default function UserDashboard() {
                                 onClick={() =>
                                   handleTakeTestClick(test.testId, test.name)
                                 }
-                                className={`action-button ${
+                                className={`action-button take-test-btn ${
                                   isTestActive(test) ? "" : "disabled"
                                 }`}
                                 disabled={!isTestActive(test)}
                                 title={getTestStatus(test)}
                               >
-                                {isTestActive(test)
-                                  ? "Take Test"
-                                  : "Not Available"}
+                                {isTestActive(test) ? "Take Test" : "Not Available"}
                               </button>
                             </td>
                           </tr>
@@ -520,7 +553,7 @@ export default function UserDashboard() {
           </>
         )}
         {activeSection === "tests" && (
-          <div className="section">
+          <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
             <h3 className="section-title">All Tests</h3>
             <div className="table-container">
               {tests.length === 0 ? (
@@ -539,7 +572,7 @@ export default function UserDashboard() {
                   </thead>
                   <tbody>
                     {tests.map((test) => (
-                      <tr key={test.testId}>
+                      <tr key={test.testId} className="animate-slide-in">
                         <td>{test.name}</td>
                         <td>
                           {new Date(test.date).toLocaleDateString("en-IN", {
@@ -560,7 +593,7 @@ export default function UserDashboard() {
                             onClick={() =>
                               handleTakeTestClick(test.testId, test.name)
                             }
-                            className={`action-button ${
+                            className={`action-button take-test-btn ${
                               isTestActive(test) ? "" : "disabled"
                               }`}
                             disabled={!isTestActive(test)}
@@ -578,13 +611,11 @@ export default function UserDashboard() {
           </div>
         )}
         {activeSection === "results" && (
-          <div className="section">
+          <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
             <h3 className="section-title">Previous Test Results</h3>
             <div className="table-container">
               {results.length === 0 ? (
-                <p className="empty-state">
-                  No previous test results available.
-                </p>
+                <p className="empty-state">No previous test results available.</p>
               ) : (
                 <table className="dashboard-table">
                   <thead>
@@ -597,7 +628,7 @@ export default function UserDashboard() {
                   </thead>
                   <tbody>
                     {results.map((result, index) => (
-                      <tr key={index}>
+                      <tr key={index} className="animate-slide-in">
                         <td>{result.testId.name}</td>
                         <td>
                           {new Date(result.testId.date).toLocaleDateString(
@@ -607,7 +638,8 @@ export default function UserDashboard() {
                         </td>
                         <td>
                           {(
-                            (result.score / result.totalQuestions) * 100
+                            (result.score / result.totalQuestions) *
+                            100
                           ).toFixed(0)}
                           %
                         </td>
@@ -622,61 +654,24 @@ export default function UserDashboard() {
         )}
         {activeSection === "profile" && (
           <div className="section profile-section">
-            <h3 className="section-title">Student Profile</h3>
-            <p className="section-description">Manage your personal details and academic achievements.</p>
+            <h3 className="section-title">Profile</h3>
             {profile && (
-              <div className="profile-container">
-                <div className="profile-header">
-                  <div
-                    className="profile-picture"
-                    style={{
-                      backgroundImage: `url("https://via.placeholder.com/128")`,
-                    }}
-                  ></div>
-                  <div className="profile-info">
-                    <p className="profile-name">{profile.name}</p>
-                    <p className="profile-meta">Student ID: {localStorage.getItem("studentId")}</p>
-                    <p className="profile-meta">Joined: {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
-                  </div>
-                </div>
-                <h4 className="profile-subheading">Personal Details</h4>
-                <div className="personal-details">
-                  <div className="detail-item">
-                    <p className="detail-label">Name</p>
-                    <p className="detail-value">{profile.name}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Age</p>
-                    <p className="detail-value">{calculateAge(profile.profile.dob)}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Contact Number</p>
-                    <p className="detail-value">{profile.profile.phone}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Email</p>
-                    <p className="detail-value">{profile.email}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Address</p>
-                    <p className="detail-value">{profile.profile.address}</p>
-                  </div>
-                </div>
-                <h4 className="profile-subheading">Academic Achievements</h4>
-                <div className="achievements">
-                  <div className="achievement-item">
-                    <p className="achievement-title">Overall Grade</p>
-                    <p className="achievement-value">{overallGrade}</p>
-                  </div>
-                  <div className="achievement-item">
-                    <p className="achievement-title">Average Score</p>
-                    <p className="achievement-value">{averageScore}</p>
-                  </div>
-                  <div className="achievement-item">
-                    <p className="achievement-title">Tests Taken</p>
-                    <p className="achievement-value">{totalTests}</p>
-                  </div>
-                </div>
+              <div className="profile-details">
+                <p>
+                  <strong>Name:</strong> {profile.name}
+                </p>
+                <p>
+                  <strong>Email:</strong> {profile.email}
+                </p>
+                <p>
+                  <strong>Date of Birth:</strong> {profile.profile.dob}
+                </p>
+                <p>
+                  <strong>Phone:</strong> {profile.profile.phone}
+                </p>
+                <p>
+                  <strong>Address:</strong> {profile.profile.address}
+                </p>
               </div>
             )}
           </div>
