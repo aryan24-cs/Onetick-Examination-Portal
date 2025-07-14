@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import Loader from "../../../components/loader";
 import Layout from "../../../components/Layout";
+import '../../../styles/userdashboard.css'
+// import '../../../styles/global.css'
 
 interface Test {
   testId: string;
@@ -43,6 +45,53 @@ export default function UserDashboard() {
   const [activeSection, setActiveSection] = useState(
     searchParams.get("section") || "dashboard"
   );
+  const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string>("");
+
+  // Load profile picture from localStorage on mount
+  useEffect(() => {
+    const savedPic = localStorage.getItem("profilePic");
+    if (savedPic) {
+      setProfilePic(savedPic);
+    }
+  }, []);
+
+  // Handle profile picture upload with validation
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please upload a valid image file (e.g., JPG, PNG).");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Image size must be less than 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setProfilePic(result);
+      localStorage.setItem("profilePic", result);
+      setUploadError("");
+    };
+    reader.onerror = () => {
+      setUploadError("Failed to read the image file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle remove profile picture
+  const handleRemovePhoto = () => {
+    setProfilePic(null);
+    localStorage.removeItem("profilePic");
+    setUploadError("");
+  };
 
   // Update activeSection when searchParams change
   useEffect(() => {
@@ -361,6 +410,10 @@ export default function UserDashboard() {
     router.push(`/user/test/${encodeURIComponent(cleanTestId)}`);
   };
 
+  const handleBackToDashboard = () => {
+    router.push("/user/dashboard?section=dashboard");
+  };
+
   const { totalTests, averageScore, overallGrade } = calculateMetrics();
 
   if (isLoading) {
@@ -368,30 +421,30 @@ export default function UserDashboard() {
   }
 
   return (
-    <Layout role="user">
-      <div className="dashboard-container">
+    <Layout role="user" profilePic={profilePic}>
+      <div className="dashboard-container animate-slide-in">
         <h2 className="dashboard-title">Student Dashboard</h2>
-        {error && <p className="error-message">{error}</p>}
+        {error && <p className="error-message animate-error">{error}</p>}
         {activeSection === "dashboard" && (
           <>
-            <div className="section performance-overview">
+            <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
               <h3 className="section-title">Performance Overview</h3>
               <div className="metrics-grid">
-                <div className="metric-card">
+                <div className="metric-card animate-slide-in" style={{ animationDelay: "0.2s" }}>
                   <p className="metric-label">Overall Grade</p>
                   <p className="metric-value">{overallGrade}</p>
                 </div>
-                <div className="metric-card">
+                <div className="metric-card animate-slide-in" style={{ animationDelay: "0.3s" }}>
                   <p className="metric-label">Average Score</p>
                   <p className="metric-value">{averageScore}</p>
                 </div>
-                <div className="metric-card">
+                <div className="metric-card animate-slide-in" style={{ animationDelay: "0.4s" }}>
                   <p className="metric-label">Tests Taken</p>
                   <p className="metric-value">{totalTests}</p>
                 </div>
               </div>
             </div>
-            <div className="section">
+            <div className="section animate-slide-in" style={{ animationDelay: "0.2s" }}>
               <h3 className="section-title">Ongoing Tests</h3>
               <div className="table-container">
                 {ongoingTests.length === 0 ? (
@@ -409,7 +462,7 @@ export default function UserDashboard() {
                     </thead>
                     <tbody>
                       {ongoingTests.map((test) => (
-                        <tr key={test.testId}>
+                        <tr key={test.testId} className="animate-slide-in">
                           <td>{test.name}</td>
                           <td>
                             {new Date(test.date).toLocaleDateString("en-IN", {
@@ -429,15 +482,13 @@ export default function UserDashboard() {
                               onClick={() =>
                                 handleTakeTestClick(test.testId, test.name)
                               }
-                              className={`action-button ${
+                              className={`action-button take-test-btn ${
                                 isTestActive(test) ? "" : "disabled"
                               }`}
                               disabled={!isTestActive(test)}
                               title={getTestStatus(test)}
                             >
-                              {isTestActive(test)
-                                ? "Take Test"
-                                : "Not Available"}
+                              {isTestActive(test) ? "Take Test" : "Not Available"}
                             </button>
                           </td>
                         </tr>
@@ -447,11 +498,10 @@ export default function UserDashboard() {
                 )}
               </div>
             </div>
-            <div className="section">
+            <div className="section animate-slide-in" style={{ animationDelay: "0.3s" }}>
               <h3 className="section-title">Upcoming Tests</h3>
               <div className="table-container">
-                {tests.filter((test) => new Date(test.date) > new Date())
-                  .length === 0 ? (
+                {tests.filter((test) => new Date(test.date) > new Date()).length === 0 ? (
                   <p className="empty-state">No upcoming tests available.</p>
                 ) : (
                   <table className="dashboard-table">
@@ -468,7 +518,7 @@ export default function UserDashboard() {
                       {tests
                         .filter((test) => new Date(test.date) > new Date())
                         .map((test) => (
-                          <tr key={test.testId}>
+                          <tr key={test.testId} className="animate-slide-in">
                             <td>{test.name}</td>
                             <td>
                               {new Date(test.date).toLocaleDateString("en-IN", {
@@ -488,15 +538,13 @@ export default function UserDashboard() {
                                 onClick={() =>
                                   handleTakeTestClick(test.testId, test.name)
                                 }
-                                className={`action-button ${
+                                className={`action-button take-test-btn ${
                                   isTestActive(test) ? "" : "disabled"
                                 }`}
                                 disabled={!isTestActive(test)}
                                 title={getTestStatus(test)}
                               >
-                                {isTestActive(test)
-                                  ? "Take Test"
-                                  : "Not Available"}
+                                {isTestActive(test) ? "Take Test" : "Not Available"}
                               </button>
                             </td>
                           </tr>
@@ -509,7 +557,7 @@ export default function UserDashboard() {
           </>
         )}
         {activeSection === "tests" && (
-          <div className="section">
+          <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
             <h3 className="section-title">All Tests</h3>
             <div className="table-container">
               {tests.length === 0 ? (
@@ -528,7 +576,7 @@ export default function UserDashboard() {
                   </thead>
                   <tbody>
                     {tests.map((test) => (
-                      <tr key={test.testId}>
+                      <tr key={test.testId} className="animate-slide-in">
                         <td>{test.name}</td>
                         <td>
                           {new Date(test.date).toLocaleDateString("en-IN", {
@@ -549,7 +597,7 @@ export default function UserDashboard() {
                             onClick={() =>
                               handleTakeTestClick(test.testId, test.name)
                             }
-                            className={`action-button ${
+                            className={`action-button take-test-btn ${
                               isTestActive(test) ? "" : "disabled"
                             }`}
                             disabled={!isTestActive(test)}
@@ -567,13 +615,11 @@ export default function UserDashboard() {
           </div>
         )}
         {activeSection === "results" && (
-          <div className="section">
+          <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
             <h3 className="section-title">Previous Test Results</h3>
             <div className="table-container">
               {results.length === 0 ? (
-                <p className="empty-state">
-                  No previous test results available.
-                </p>
+                <p className="empty-state">No previous test results available.</p>
               ) : (
                 <table className="dashboard-table">
                   <thead>
@@ -586,7 +632,7 @@ export default function UserDashboard() {
                   </thead>
                   <tbody>
                     {results.map((result, index) => (
-                      <tr key={index}>
+                      <tr key={index} className="animate-slide-in">
                         <td>{result.testId.name}</td>
                         <td>
                           {new Date(result.testId.date).toLocaleDateString(
@@ -595,11 +641,7 @@ export default function UserDashboard() {
                           )}
                         </td>
                         <td>
-                          {(
-                            (result.score / result.totalQuestions) *
-                            100
-                          ).toFixed(0)}
-                          %
+                          {((result.score / result.totalQuestions) * 100).toFixed(0)}%
                         </td>
                         <td>{getGrade(result.score, result.totalQuestions)}</td>
                       </tr>
@@ -611,25 +653,61 @@ export default function UserDashboard() {
           </div>
         )}
         {activeSection === "profile" && (
-          <div className="section profile-section">
+          <div className="section animate-slide-in" style={{ animationDelay: "0.1s" }}>
             <h3 className="section-title">Profile</h3>
             {profile && (
               <div className="profile-details">
-                <p>
-                  <strong>Name:</strong> {profile.name}
-                </p>
-                <p>
-                  <strong>Email:</strong> {profile.email}
-                </p>
-                <p>
-                  <strong>Date of Birth:</strong> {profile.profile.dob}
-                </p>
-                <p>
-                  <strong>Phone:</strong> {profile.profile.phone}
-                </p>
-                <p>
-                  <strong>Address:</strong> {profile.profile.address}
-                </p>
+                <div className="profile-edit-section">
+                  <div className="avatar" style={{ backgroundImage: profilePic ? `url(${profilePic})` : undefined }}></div>
+                  <div className="profile-upload-container">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="profile-upload"
+                      id="profile-upload"
+                      onChange={handleProfilePicChange}
+                    />
+                    <label htmlFor="profile-upload" className="edit-profile-btn">
+                      Upload Photo
+                    </label>
+                    {profilePic && (
+                      <button
+                        onClick={handleRemovePhoto}
+                        className="remove-photo-btn"
+                      >
+                        Remove Photo
+                      </button>
+                    )}
+                    {uploadError && <p className="error-message animate-error">{uploadError}</p>}
+                  </div>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.2s" }}>
+                  <span className="profile-label">Name:</span>
+                  <span className="profile-value">{profile.name}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.3s" }}>
+                  <span className="profile-label">Email:</span>
+                  <span className="profile-value">{profile.email}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.4s" }}>
+                  <span className="profile-label">Date of Birth:</span>
+                  <span className="profile-value">{profile.profile.dob}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.5s" }}>
+                  <span className="profile-label">Phone:</span>
+                  <span className="profile-value">{profile.profile.phone}</span>
+                </div>
+                <div className="profile-item animate-slide-in" style={{ animationDelay: "0.6s" }}>
+                  <span className="profile-label">Address:</span>
+                  <span className="profile-value">{profile.profile.address}</span>
+                </div>
+                <button
+                  onClick={handleBackToDashboard}
+                  className="nav-button"
+                  style={{ marginTop: "16px" }}
+                >
+                  Back to Dashboard
+                </button>
               </div>
             )}
           </div>
