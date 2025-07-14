@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import Loader from "../../../components/loader";
 import Layout from "../../../components/Layout";
-import '../../../styles/userdashboard.css'
+import Chart from 'chart.js/auto';
+import '../../../styles/userdashboard.css';
 
 interface Test {
   testId: string;
@@ -41,9 +42,14 @@ export default function UserDashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [rank, setRank] = useState<string>("N/A");
   const [activeSection, setActiveSection] = useState(
     searchParams.get("section") || "dashboard"
   );
+  const pieChartRef = useRef<HTMLCanvasElement | null>(null);
+  const lineChartRef = useRef<HTMLCanvasElement | null>(null);
+  const pieChartInstance = useRef<Chart | null>(null);
+  const lineChartInstance = useRef<Chart | null>(null);
 
   useEffect(() => {
     const section = searchParams.get("section") || "dashboard";
@@ -295,9 +301,56 @@ export default function UserDashboard() {
         }
       };
 
+      const fetchRank = async () => {
+        const baseUrl =
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const url = `${baseUrl}/api/student/rank/${studentId}`;
+        console.log("Fetching rank with:", { url, studentId });
+
+        try {
+          const res = await fetch(url, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          console.log("Rank response status:", {
+            status: res.status,
+            statusText: res.statusText,
+          });
+
+          const contentType = res.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            const text = await res.text();
+            console.error("Non-JSON response received for rank:", {
+              status: res.status,
+              text: text.slice(0, 100),
+            });
+            throw new Error(
+              "Server returned a non-JSON response for rank."
+            );
+          }
+
+          const data = await res.json();
+          console.log("Rank response data:", data);
+
+          if (res.ok) {
+            setRank(data.rank.toString());
+          } else {
+            setError(data.message || "Failed to fetch rank");
+            console.error("Fetch rank failed:", data);
+          }
+        } catch (err: any) {
+          console.error("Fetch rank error:", err.message);
+          setError(err.message || "Error fetching rank");
+        }
+      };
+
       const fetchData = async () => {
         setIsLoading(true);
-        await Promise.all([fetchProfile(), fetchTests(), fetchResults()]);
+        await Promise.all([fetchProfile(), fetchTests(), fetchResults(), fetchRank()]);
         setIsLoading(false);
       };
 
@@ -311,6 +364,95 @@ export default function UserDashboard() {
     }
   }, [router]);
 
+  useEffect(() => {
+    if (results.length > 0 && pieChartRef.current && lineChartRef.current) {
+      // Destroy existing charts to prevent memory leaks
+      if (pieChartInstance.current) {
+        pieChartInstance.current.destroy();
+      }
+      if (lineChartInstance.current) {
+        lineChartInstance.current.destroy();
+      }
+
+      // Pie Chart: Grade Distribution
+      const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+      results.forEach((result) => {
+        const percentage = result.totalQuestions > 0 ? (result.score / result.totalQuestions) * 100 : 0;
+        if (percentage >= 90) grades.A++;
+        else if (percentage >= 80) grades.B++;
+        else if (percentage >= 70) grades.C++;
+        else if (percentage >= 60) grades.D++;
+        else grades.F++;
+      });
+
+      pieChartInstance.current = new Chart(pieChartRef.current, {
+        type: 'pie',
+        data: {
+          labels: ['A (90%+)', 'B (80-89%)', 'C (70-79%)', 'D (60-69%)', 'F (<60%)'],
+          datasets: [{
+            data: [grades.A, grades.B, grades.C, grades.D, grades.F],
+            backgroundColor: ['#10b981', '#34d399', '#60a5fa', '#f87171', '#ef4444'],
+            borderColor: '#ffffff',
+            borderWidth: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            title: { display: true, text: 'Grade Distribution', font: { size: 16 } },
+          },
+        },
+      });
+
+      // Line Chart: Score Trends
+      const sortedResults = [...results].sort((a, b) =>
+        new Date(a.testId?.date || 0).getTime() - new Date(b.testId?.date || 0).getTime()
+      );
+      const labels = sortedResults.map((r, i) => r.testId?.name || `Test ${i + 1}`);
+      const scores = sortedResults.map((r) =>
+        r.totalQuestions > 0 ? (r.score / r.totalQuestions) * 100 : 0
+      );
+
+      lineChartInstance.current = new Chart(lineChartRef.current, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Score (%)',
+            data: scores,
+            borderColor: '#1e3a8a', /* Navy blue for line */
+            backgroundColor: 'rgba(30, 58, 138, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: '#1e3a8a',
+            pointRadius: 5,
+          }],
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true, max: 100, title: { display: true, text: 'Score (%)' } },
+            x: { title: { display: true, text: 'Tests' } },
+          },
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: 'Score Trends Over Time', font: { size: 16 } },
+          },
+        },
+      });
+    }
+
+    return () => {
+      if (pieChartInstance.current) {
+        pieChartInstance.current.destroy();
+      }
+      if (lineChartInstance.current) {
+        lineChartInstance.current.destroy();
+      }
+    };
+  }, [results]);
+
   const calculateMetrics = () => {
     const totalTests = results.length;
     const averageScore = totalTests
@@ -321,17 +463,27 @@ export default function UserDashboard() {
           ) / totalTests
         ).toFixed(0) + "%"
       : "N/A";
+
+    // Calculate overall grade based on average percentage
+    const averagePercentage = totalTests
+      ? results.reduce(
+          (sum, r) => sum + (r.score / r.totalQuestions) * 100,
+          0
+        ) / totalTests
+      : 0;
     const overallGrade = totalTests
-      ? results.every((r) => (r.score / r.totalQuestions) * 100 >= 90)
+      ? averagePercentage >= 90
         ? "A"
-        : results.every((r) => (r.score / r.totalQuestions) * 100 >= 80)
+        : averagePercentage >= 80
         ? "B"
-        : results.every((r) => (r.score / r.totalQuestions) * 100 >= 70)
+        : averagePercentage >= 70
         ? "C"
-        : "D"
+        : averagePercentage >= 60
+        ? "D"
+        : "F"
       : "N/A";
 
-    return { totalTests, averageScore, overallGrade };
+    return { totalTests, averageScore, overallGrade, rank, averagePercentage };
   };
 
   const getGrade = (score: number, total: number) => {
@@ -372,7 +524,7 @@ export default function UserDashboard() {
     return age.toString();
   };
 
-  const { totalTests, averageScore, overallGrade } = calculateMetrics();
+  const { totalTests, averageScore, overallGrade, averagePercentage } = calculateMetrics();
 
   if (isLoading) {
     return <Loader />;
@@ -380,13 +532,18 @@ export default function UserDashboard() {
 
   return (
     <Layout role="user">
-      <div className="dashboard-container">
+      <div className="dashboard-header">
         <h2 className="dashboard-title">Student Dashboard</h2>
+        {profile && (
+          <p className="welcome-message">Welcome, {profile.name}!</p>
+        )}
+      </div>
+      <div className="dashboard-container">
         {error && <p className="error-message">{error}</p>}
         {activeSection === "dashboard" && (
-          <>
+          <div className="dashboard-left">
             <div className="section performance-overview">
-              <h3 className="section-title">Performance Overview</h3>
+              <h3 className="section-title">Performance Metrics</h3>
               <div className="metrics-grid">
                 <div className="metric-card">
                   <p className="metric-label">Overall Grade</p>
@@ -395,14 +552,22 @@ export default function UserDashboard() {
                 <div className="metric-card">
                   <p className="metric-label">Average Score</p>
                   <p className="metric-value">{averageScore}</p>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${averagePercentage}%` }}
+                    ></div>
+                  </div>
                 </div>
                 <div className="metric-card">
                   <p className="metric-label">Tests Taken</p>
                   <p className="metric-value">{totalTests}</p>
                 </div>
+                <div className="metric-card">
+                  <p className="metric-label">Rank</p>
+                  <p className="metric-value">{rank}</p>
+                </div>
               </div>
-            </div>
-            <div className="section">
               <h3 className="section-title">Ongoing Tests</h3>
               <div className="table-container">
                 {ongoingTests.length === 0 ? (
@@ -440,15 +605,13 @@ export default function UserDashboard() {
                               onClick={() =>
                                 handleTakeTestClick(test.testId, test.name)
                               }
-                              className={`action-button ${
+                              className={`action-button take-test-btn ${
                                 isTestActive(test) ? "" : "disabled"
                               }`}
                               disabled={!isTestActive(test)}
                               title={getTestStatus(test)}
                             >
-                              {isTestActive(test)
-                                ? "Take Test"
-                                : "Not Available"}
+                              {isTestActive(test) ? "Take Test" : "Not Available"}
                             </button>
                           </td>
                         </tr>
@@ -458,69 +621,22 @@ export default function UserDashboard() {
                 )}
               </div>
             </div>
-            <div className="section">
-              <h3 className="section-title">Upcoming Tests</h3>
-              <div className="table-container">
-                {tests.filter((test) => new Date(test.date) > new Date())
-                  .length === 0 ? (
-                  <p className="empty-state">No upcoming tests available.</p>
-                ) : (
-                  <table className="dashboard-table">
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tests
-                        .filter((test) => new Date(test.date) > new Date())
-                        .map((test) => (
-                          <tr key={test.testId}>
-                            <td>{test.name}</td>
-                            <td>
-                              {new Date(test.date).toLocaleDateString("en-IN", {
-                                timeZone: "Asia/Kolkata",
-                              })}
-                            </td>
-                            <td>
-                              {new Date(test.date).toLocaleTimeString("en-IN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                timeZone: "Asia/Kolkata",
-                              })}
-                            </td>
-                            <td>{getTestStatus(test)}</td>
-                            <td>
-                              <button
-                                onClick={() =>
-                                  handleTakeTestClick(test.testId, test.name)
-                                }
-                                className={`action-button ${
-                                  isTestActive(test) ? "" : "disabled"
-                                }`}
-                                disabled={!isTestActive(test)}
-                                title={getTestStatus(test)}
-                              >
-                                {isTestActive(test)
-                                  ? "Take Test"
-                                  : "Not Available"}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+          </div>
+        )}
+        {activeSection === "dashboard" && (
+          <div className="dashboard-right">
+            <div className="chart-card">
+              <h3 className="section-title">Grade Distribution</h3>
+              <canvas ref={pieChartRef} className="chart-canvas"></canvas>
             </div>
-          </>
+            <div className="chart-card">
+              <h3 className="section-title">Score Trends</h3>
+              <canvas ref={lineChartRef} className="chart-canvas"></canvas>
+            </div>
+          </div>
         )}
         {activeSection === "tests" && (
-          <div className="section">
+          <div className="section full-width">
             <h3 className="section-title">All Tests</h3>
             <div className="table-container">
               {tests.length === 0 ? (
@@ -560,7 +676,7 @@ export default function UserDashboard() {
                             onClick={() =>
                               handleTakeTestClick(test.testId, test.name)
                             }
-                            className={`action-button ${
+                            className={`action-button take-test-btn ${
                               isTestActive(test) ? "" : "disabled"
                             }`}
                             disabled={!isTestActive(test)}
@@ -578,13 +694,11 @@ export default function UserDashboard() {
           </div>
         )}
         {activeSection === "results" && (
-          <div className="section">
+          <div className="section full-width">
             <h3 className="section-title">Previous Test Results</h3>
             <div className="table-container">
               {results.length === 0 ? (
-                <p className="empty-state">
-                  No previous test results available.
-                </p>
+                <p className="empty-state">No previous test results available.</p>
               ) : (
                 <table className="dashboard-table">
                   <thead>
@@ -628,7 +742,7 @@ export default function UserDashboard() {
           </div>
         )}
         {activeSection === "profile" && (
-          <div className="section profile-section">
+          <div className="section full-width profile-section">
             <h3 className="section-title">Student Profile</h3>
             <p className="section-description">Manage your personal details and academic achievements.</p>
             {profile && (
@@ -678,10 +792,20 @@ export default function UserDashboard() {
                   <div className="achievement-item">
                     <p className="achievement-title">Average Score</p>
                     <p className="achievement-value">{averageScore}</p>
+                    <div className="progress-bar">
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${averagePercentage}%` }}
+                      ></div>
+                    </div>
                   </div>
                   <div className="achievement-item">
                     <p className="achievement-title">Tests Taken</p>
                     <p className="achievement-value">{totalTests}</p>
+                  </div>
+                  <div className="achievement-item">
+                    <p className="achievement-title">Rank</p>
+                    <p className="achievement-value">{rank}</p>
                   </div>
                 </div>
               </div>
