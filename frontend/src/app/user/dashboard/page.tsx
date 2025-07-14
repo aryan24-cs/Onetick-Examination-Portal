@@ -361,6 +361,17 @@ export default function UserDashboard() {
     router.push(`/user/test/${encodeURIComponent(cleanTestId)}`);
   };
 
+  const calculateAge = (dob: string) => {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age.toString();
+  };
+
   const { totalTests, averageScore, overallGrade } = calculateMetrics();
 
   if (isLoading) {
@@ -551,7 +562,7 @@ export default function UserDashboard() {
                             }
                             className={`action-button ${
                               isTestActive(test) ? "" : "disabled"
-                            }`}
+                              }`}
                             disabled={!isTestActive(test)}
                             title={getTestStatus(test)}
                           >
@@ -596,8 +607,7 @@ export default function UserDashboard() {
                         </td>
                         <td>
                           {(
-                            (result.score / result.totalQuestions) *
-                            100
+                            (result.score / result.totalQuestions) * 100
                           ).toFixed(0)}
                           %
                         </td>
@@ -612,24 +622,61 @@ export default function UserDashboard() {
         )}
         {activeSection === "profile" && (
           <div className="section profile-section">
-            <h3 className="section-title">Profile</h3>
+            <h3 className="section-title">Student Profile</h3>
+            <p className="section-description">Manage your personal details and academic achievements.</p>
             {profile && (
-              <div className="profile-details">
-                <p>
-                  <strong>Name:</strong> {profile.name}
-                </p>
-                <p>
-                  <strong>Email:</strong> {profile.email}
-                </p>
-                <p>
-                  <strong>Date of Birth:</strong> {profile.profile.dob}
-                </p>
-                <p>
-                  <strong>Phone:</strong> {profile.profile.phone}
-                </p>
-                <p>
-                  <strong>Address:</strong> {profile.profile.address}
-                </p>
+              <div className="profile-container">
+                <div className="profile-header">
+                  <div
+                    className="profile-picture"
+                    style={{
+                      backgroundImage: `url("https://via.placeholder.com/128")`,
+                    }}
+                  ></div>
+                  <div className="profile-info">
+                    <p className="profile-name">{profile.name}</p>
+                    <p className="profile-meta">Student ID: {localStorage.getItem("studentId")}</p>
+                    <p className="profile-meta">Joined: {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
+                  </div>
+                </div>
+                <h4 className="profile-subheading">Personal Details</h4>
+                <div className="personal-details">
+                  <div className="detail-item">
+                    <p className="detail-label">Name</p>
+                    <p className="detail-value">{profile.name}</p>
+                  </div>
+                  <div className="detail-item">
+                    <p className="detail-label">Age</p>
+                    <p className="detail-value">{calculateAge(profile.profile.dob)}</p>
+                  </div>
+                  <div className="detail-item">
+                    <p className="detail-label">Contact Number</p>
+                    <p className="detail-value">{profile.profile.phone}</p>
+                  </div>
+                  <div className="detail-item">
+                    <p className="detail-label">Email</p>
+                    <p className="detail-value">{profile.email}</p>
+                  </div>
+                  <div className="detail-item">
+                    <p className="detail-label">Address</p>
+                    <p className="detail-value">{profile.profile.address}</p>
+                  </div>
+                </div>
+                <h4 className="profile-subheading">Academic Achievements</h4>
+                <div className="achievements">
+                  <div className="achievement-item">
+                    <p className="achievement-title">Overall Grade</p>
+                    <p className="achievement-value">{overallGrade}</p>
+                  </div>
+                  <div className="achievement-item">
+                    <p className="achievement-title">Average Score</p>
+                    <p className="achievement-value">{averageScore}</p>
+                  </div>
+                  <div className="achievement-item">
+                    <p className="achievement-title">Tests Taken</p>
+                    <p className="achievement-value">{totalTests}</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
