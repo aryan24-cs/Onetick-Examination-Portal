@@ -26,13 +26,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Rate Limiting (commented out as in your original code)
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: 100,
-// });
-// app.use(limiter);
-
 // MongoDB Connection
 const connectDB = async () => {
   try {
@@ -61,7 +54,7 @@ const connectDB = async () => {
       const isMatch = await bcrypt.compare(adminPassword, admin.password);
       if (!isMatch) {
         console.log("Admin password in .env has changed, updating password");
-        admin.password = adminPassword;
+        admin.password = await bcrypt.hash(adminPassword, 10);
         await admin.save();
         console.log(`Admin password updated for email: ${adminEmail}`);
       }
@@ -391,12 +384,10 @@ app.post(
       res.json({ message: "OTP sent to email" });
     } catch (error) {
       console.error("Registration error:", error);
-      res
-        .status(500)
-        .json({
-          message: "Registration failed",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Registration failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -436,12 +427,10 @@ app.post(
       });
     } catch (error) {
       console.error("OTP verification error:", error);
-      res
-        .status(500)
-        .json({
-          message: "OTP verification failed",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "OTP verification failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -492,25 +481,15 @@ app.post(
   async (req: Request, res: Response) => {
     const { email, password } = req.body;
     try {
-      console.log("Admin login attempt:", { email, password: "****" });
+      console.log("Admin login attempt:", { email });
       const admin = await Admin.findOne({ email });
       if (!admin) {
-        console.log("Admin not found in database:", { email });
-        const admins = await Admin.find().select("email").lean();
-        console.log(
-          "Available admin emails in database:",
-          admins.map((a) => a.email)
-        );
-        return res
-          .status(401)
-          .json({
-            message: "Invalid credentials",
-            availableAdmins: admins.map((a) => a.email),
-          });
+        console.log("Admin not found:", email);
+        return res.status(401).json({ message: "Invalid credentials" });
       }
       const isMatch = await admin.comparePassword(password);
       if (!isMatch) {
-        console.log("Password mismatch for admin:", { email });
+        console.log("Password mismatch for admin:", email);
         return res.status(401).json({ message: "Invalid credentials" });
       }
       const token = jwt.sign(
@@ -520,7 +499,6 @@ app.post(
       );
       console.log("Admin login successful:", {
         adminId: admin._id.toString(),
-        email,
       });
       res.json({
         token,
@@ -530,12 +508,10 @@ app.post(
       });
     } catch (error) {
       console.error("Admin login error:", error);
-      res
-        .status(500)
-        .json({
-          message: "Admin login failed",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Admin login failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -562,12 +538,10 @@ app.post(
       res.json({ message: "Password reset successful" });
     } catch (error) {
       console.error("Admin password reset error:", error);
-      res
-        .status(500)
-        .json({
-          message: "Password reset failed",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Password reset failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -605,12 +579,10 @@ app.post(
       res.json({ success: true, questionId });
     } catch (error) {
       console.error("Question creation error:", error);
-      res
-        .status(400)
-        .json({
-          message: "Question creation failed",
-          error: (error as Error).message,
-        });
+      res.status(400).json({
+        message: "Question creation failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -632,12 +604,10 @@ app.get(
       res.json(questions);
     } catch (error) {
       console.error("Error fetching questions:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch questions",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch questions",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -662,12 +632,10 @@ app.get(
       res.json(students);
     } catch (error) {
       console.error("Error fetching students:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch students",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch students",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -683,12 +651,10 @@ app.post(
       const testDate = new Date(date);
       if (isNaN(testDate.getTime())) {
         console.log("Invalid date format:", date);
-        return res
-          .status(400)
-          .json({
-            message:
-              "Invalid date format. Use ISO format (e.g., 2025-07-11T10:20:00.000Z)",
-          });
+        return res.status(400).json({
+          message:
+            "Invalid date format. Use ISO format (e.g., 2025-07-11T10:20:00.000Z)",
+        });
       }
       const now = new Date();
       const bufferTime = new Date(testDate.getTime() - 5 * 60 * 1000);
@@ -698,12 +664,9 @@ app.post(
           now: now.toISOString(),
           minAllowed: bufferTime.toISOString(),
         });
-        return res
-          .status(400)
-          .json({
-            message:
-              "Test cannot be created within 5 minutes of its start time",
-          });
+        return res.status(400).json({
+          message: "Test cannot be created within 5 minutes of its start time",
+        });
       }
       const questions = await Question.find({
         questionId: { $in: questionIds },
@@ -744,12 +707,10 @@ app.post(
       res.json({ success: true, testId });
     } catch (error) {
       console.error("Test creation error:", error);
-      res
-        .status(400)
-        .json({
-          message: "Test creation failed",
-          error: (error as Error).message,
-        });
+      res.status(400).json({
+        message: "Test creation failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -797,12 +758,10 @@ app.post("/api/debug/create-test", async (req: Request, res: Response) => {
     res.json({ success: true, testId });
   } catch (error) {
     console.error("Debug test creation error:", error);
-    res
-      .status(400)
-      .json({
-        message: "Debug test creation failed",
-        error: (error as Error).message,
-      });
+    res.status(400).json({
+      message: "Debug test creation failed",
+      error: (error as Error).message,
+    });
   }
 });
 
@@ -821,12 +780,10 @@ app.get("/api/tests", async (req: Request, res: Response) => {
     res.json(tests);
   } catch (error) {
     console.error("Error fetching tests:", error);
-    res
-      .status(500)
-      .json({
-        message: "Failed to fetch tests",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Failed to fetch tests",
+      error: (error as Error).message,
+    });
   }
 });
 
@@ -932,12 +889,10 @@ app.get(
       });
     } catch (error) {
       console.error("Error fetching test:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch test",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch test",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -979,8 +934,12 @@ app.post(
       });
       await result.save();
       const student = await Student.findOne({ studentId });
+      if (!student) {
+        console.log("Student not found for notification:", studentId);
+        return res.status(404).json({ message: "Student not found" });
+      }
       await sendResultNotification(
-        student!.email,
+        student.email,
         test.name,
         score,
         test.questionIds.length
@@ -992,17 +951,16 @@ app.post(
       });
       res.json({
         success: true,
+        testName: test.name,
         score,
         totalQuestions: test.questionIds.length,
       });
     } catch (error) {
       console.error("Test submission error:", error);
-      res
-        .status(400)
-        .json({
-          message: "Submission failed",
-          error: (error as Error).message,
-        });
+      res.status(400).json({
+        message: "Submission failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -1029,12 +987,10 @@ app.get(
       res.json(results);
     } catch (error) {
       console.error("Error fetching student results:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch results",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch results",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -1062,12 +1018,10 @@ app.get(
       res.json(student);
     } catch (error) {
       console.error("Error fetching student profile:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch profile",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch profile",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -1094,12 +1048,10 @@ app.put(
       res.json({ success: true });
     } catch (error) {
       console.error("Profile update error:", error);
-      res
-        .status(400)
-        .json({
-          message: "Profile update failed",
-          error: (error as Error).message,
-        });
+      res.status(400).json({
+        message: "Profile update failed",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -1122,12 +1074,10 @@ app.get(
       res.json(results);
     } catch (error) {
       console.error("Error fetching admin results:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch results",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch results",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -1178,7 +1128,7 @@ app.get(
                 100
               : 0,
         }))
-        .filter((s) => s.averagePercentage > 0); // Exclude students with no valid scores
+        .filter((s) => s.averagePercentage > 0);
 
       if (!studentAverages.some((s) => s.studentId === req.params.studentId)) {
         console.log(
@@ -1203,12 +1153,10 @@ app.get(
       res.json({ rank });
     } catch (error) {
       console.error("Error fetching student rank:", error);
-      res
-        .status(500)
-        .json({
-          message: "Failed to fetch rank",
-          error: (error as Error).message,
-        });
+      res.status(500).json({
+        message: "Failed to fetch rank",
+        error: (error as Error).message,
+      });
     }
   }
 );
@@ -1228,12 +1176,10 @@ app.get("/api/debug/tests", async (req: Request, res: Response) => {
     res.json(tests);
   } catch (error) {
     console.error("Error fetching debug tests:", error);
-    res
-      .status(500)
-      .json({
-        message: "Failed to fetch tests",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Failed to fetch tests",
+      error: (error as Error).message,
+    });
   }
 });
 

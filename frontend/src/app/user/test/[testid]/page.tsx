@@ -372,19 +372,28 @@ export default function TestPage() {
             score: data.score,
             totalQuestions: data.totalQuestions,
           });
-          localStorage.setItem(
-            "testResult",
-            JSON.stringify({
-              testId: cleanTestId,
-              testName: data.testName,
-              score: data.score,
-              totalQuestions: data.totalQuestions,
-            })
-          );
-          setTimeout(() => {
+          // Validate result data before storing and navigating
+          if (
+            data.testName &&
+            typeof data.score === "number" &&
+            typeof data.totalQuestions === "number"
+          ) {
+            localStorage.setItem(
+              "testResult",
+              JSON.stringify({
+                testId: cleanTestId,
+                testName: data.testName,
+                score: data.score,
+                totalQuestions: data.totalQuestions,
+              })
+            );
             console.log("Navigating to result page");
             router.push("/user/test/result");
-          }, 500);
+          } else {
+            console.error("Invalid result data received:", data);
+            setError("Invalid test result data received. Please try again.");
+            setSubmitting(false);
+          }
         } else if (res.status === 401) {
           if (!isAutoSubmit) {
             setError("Session expired or invalid token. Please log in again.");
