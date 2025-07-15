@@ -448,9 +448,11 @@ export default function TestPage() {
     <div className="container">
       <div className="header">
         <h2>{test.name}</h2>
-        <div className="timer">
-          Time Left: {Math.floor(timeLeft / 60)}:
-          {(timeLeft % 60).toString().padStart(2, "0")}
+        <div className={`timer-circle ${timeLeft <= 60 ? 'heartbeat' : ''}`} style={{ ['--progress' as any]: `${(timeLeft / (test.duration * 60)) * 100}%` } as React.CSSProperties}>
+          <span className="clock-icon">🕒</span>
+          <span className="time-text">
+            {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+          </span>
         </div>
       </div>
       <div className="content">
