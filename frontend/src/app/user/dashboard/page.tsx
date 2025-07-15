@@ -10,7 +10,7 @@ import "../../../styles/userdashboard.css";
 interface Test {
   testId: string;
   name: string;
-  date: Date | string;
+  date: Date; // Changed to Date only
   duration: number;
   questions: any[];
 }
@@ -46,7 +46,7 @@ export default function UserDashboard() {
   const [activeSection, setActiveSection] = useState(
     searchParams.get("section") || "dashboard"
   );
-  const [activeTestTab, setActiveTestTab] = useState("ongoing"); // New state for test tabs
+  const [activeTestTab, setActiveTestTab] = useState("ongoing");
   const pieChartRef = useRef<HTMLCanvasElement | null>(null);
   const lineChartRef = useRef<HTMLCanvasElement | null>(null);
   const pieChartInstance = useRef<Chart | null>(null);
@@ -57,7 +57,7 @@ export default function UserDashboard() {
     console.log("Search params changed:", { section });
     setActiveSection(section);
     if (section === "tests") {
-      setActiveTestTab("ongoing"); // Default to ongoing tab when tests section is active
+      setActiveTestTab("ongoing");
     }
   }, [searchParams]);
 
@@ -69,14 +69,14 @@ export default function UserDashboard() {
 
   const isTestOngoing = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     return now >= testStart && now <= testEnd;
   };
 
   const isTestUpcoming = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     return now < testStart;
   };
 
@@ -88,14 +88,14 @@ export default function UserDashboard() {
 
   const isTestActive = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     return now >= testStart && now <= testEnd;
   };
 
   const getTestStatus = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     if (now < testStart) {
       return `Starts at ${testStart.toLocaleString("en-IN", {
@@ -220,6 +220,11 @@ export default function UserDashboard() {
               console.error("Invalid test data filtered out:", test);
               return false;
             }
+            const parsedDate = new Date(test.date);
+            if (isNaN(parsedDate.getTime())) {
+              console.error("Invalid date in test data:", test);
+              return false;
+            }
             return true;
           });
 
@@ -232,12 +237,10 @@ export default function UserDashboard() {
 
           const parsedTests = validTests.map((test: Test) => ({
             ...test,
-            date: new Date(test.date),
+            date: new Date(test.date), // Ensure date is a Date object
           }));
 
-          setOngoingTests(
-            parsedTests.filter((test: Test) => isTestOngoing(test))
-          );
+          setOngoingTests(parsedTests.filter((test: Test) => isTestOngoing(test)));
           setTests(parsedTests);
         } catch (err: any) {
           console.error("Fetch tests error:", err.message);
@@ -571,12 +574,12 @@ export default function UserDashboard() {
                           <tr key={test.testId}>
                             <td>{test.name}</td>
                             <td>
-                              {new Date(test.date).toLocaleDateString("en-IN", {
+                              {test.date.toLocaleDateString("en-IN", {
                                 timeZone: "Asia/Kolkata",
                               })}
                             </td>
                             <td>
-                              {new Date(test.date).toLocaleTimeString("en-IN", {
+                              {test.date.toLocaleTimeString("en-IN", {
                                 hour: "2-digit",
                                 minute: "2-digit",
                                 timeZone: "Asia/Kolkata",
@@ -668,12 +671,12 @@ export default function UserDashboard() {
                             <tr key={test.testId}>
                               <td>{test.name}</td>
                               <td>
-                                {new Date(test.date).toLocaleDateString("en-IN", {
+                                {test.date.toLocaleDateString("en-IN", {
                                   timeZone: "Asia/Kolkata",
                                 })}
                               </td>
                               <td>
-                                {new Date(test.date).toLocaleTimeString("en-IN", {
+                                {test.date.toLocaleTimeString("en-IN", {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                   timeZone: "Asia/Kolkata",
@@ -723,12 +726,12 @@ export default function UserDashboard() {
                             <tr key={test.testId}>
                               <td>{test.name}</td>
                               <td>
-                                {new Date(test.date).toLocaleDateString("en-IN", {
+                                {test.date.toLocaleDateString("en-IN", {
                                   timeZone: "Asia/Kolkata",
                                 })}
                               </td>
                               <td>
-                                {new Date(test.date).toLocaleTimeString("en-IN", {
+                                {test.date.toLocaleTimeString("en-IN", {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                   timeZone: "Asia/Kolkata",
@@ -776,12 +779,12 @@ export default function UserDashboard() {
                             <tr key={test.testId}>
                               <td>{test.name}</td>
                               <td>
-                                {new Date(test.date).toLocaleDateString("en-IN", {
+                                {test.date.toLocaleDateString("en-IN", {
                                   timeZone: "Asia/Kolkata",
                                 })}
                               </td>
                               <td>
-                                {new Date(test.date).toLocaleTimeString("en-IN", {
+                                {test.date.toLocaleTimeString("en-IN", {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                   timeZone: "Asia/Kolkata",
