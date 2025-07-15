@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
-import '../../../../styles/test.css'
+import './test.css';
 
 interface Question {
   questionId: string;
@@ -28,9 +28,7 @@ interface DecodedToken {
 export default function TestPage() {
   const router = useRouter();
   const params = useParams();
-  const testId = Array.isArray(params.testid)
-    ? params.testid[0]
-    : params.testid;
+  const testId = Array.isArray(params.testid) ? params.testid[0] : params.testid;
   const [test, setTest] = useState<Test | null>(null);
   const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -119,9 +117,7 @@ export default function TestPage() {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
           const res = await fetch(
-            `${
-              process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-            }/api/student/test/${cleanTestId}`,
+            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/student/test/${cleanTestId}`,
             {
               headers: { Authorization: `Bearer ${token}` },
               signal: controller.signal,
@@ -344,9 +340,7 @@ export default function TestPage() {
           timestamp: new Date().toISOString(),
         });
         const res = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-          }/api/student/submit`,
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/student/submit`,
           {
             method: "POST",
             headers: {
@@ -390,7 +384,7 @@ export default function TestPage() {
           setTimeout(() => {
             console.log("Navigating to result page");
             router.push("/user/test/result");
-          }, 500); // Slight delay to ensure state updates
+          }, 500);
         } else if (res.status === 401) {
           if (!isAutoSubmit) {
             setError("Session expired or invalid token. Please log in again.");
@@ -433,10 +427,7 @@ export default function TestPage() {
       <div className="error-container">
         <p className="error-message">{error}</p>
         {error.includes("Request timed out") && (
-          <button
-            onClick={() => window.location.reload()}
-            className="retry-button"
-          >
+          <button onClick={() => window.location.reload()} className="btn btn-secondary">
             Retry
           </button>
         )}
@@ -454,62 +445,71 @@ export default function TestPage() {
   }
 
   return (
-    <div className="test-container">
-      <h2>{test.name}</h2>
-      <div className="timer">
-        Time Left: {Math.floor(timeLeft / 60)} nhi
-        {(timeLeft % 60).toString().padStart(2, "0")}
-      </div>
-      <div className="question-card">
-        <p className="question-text">
-          Question {currentQuestion + 1}:{" "}
-          {test.questions[currentQuestion].question}
-        </p>
-        {test.questions[currentQuestion].code && (
-          <pre className="code-snippet">
-            {test.questions[currentQuestion].code}
-          </pre>
-        )}
-        <div className="options">
-          {test.questions[currentQuestion].options.map((opt: string, i: number) => (
-            <label key={i} className="option">
-              <input
-                type="radio"
-                name={`question-${currentQuestion}`}
-                checked={answers[currentQuestion] === i}
-                onChange={() => handleAnswer(i)}
-              />
-              {opt}
-            </label>
-          ))}
+    <div className="container">
+      <div className="header">
+        <h2>{test.name}</h2>
+        <div className="timer">
+          Time Left: {Math.floor(timeLeft / 60)}:
+          {(timeLeft % 60).toString().padStart(2, "0")}
         </div>
       </div>
-      <div className="navigation">
+      <div className="content">
+        <div className="question-slide active">
+          <p className="question-title">
+            Question {currentQuestion + 1}: {test.questions[currentQuestion].question}
+          </p>
+          {test.questions[currentQuestion].code && (
+            <div className="ide-code-block">
+              <pre className="code-content">
+                {test.questions[currentQuestion].code.split('\n').map((line, index) => (
+                  <span key={index}>
+                    <span className="line-number">{index + 1}</span>
+                    <span className="code-line">{line}</span>
+                    <br />
+                  </span>
+                ))}
+              </pre>
+            </div>
+          )}
+          <div className="options-container">
+            {test.questions[currentQuestion].options.map((opt: string, i: number) => (
+              <div
+                key={i}
+                className={`option-item ${answers[currentQuestion] === i ? "selected" : ""}`}
+                onClick={() => handleAnswer(i)}
+              >
+                {opt}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="footer">
         <button
           onClick={handlePrevious}
           disabled={currentQuestion === 0}
-          className="nav-button"
+          className="btn btn-secondary"
         >
           Previous
         </button>
         <button
           onClick={handleSkip}
           disabled={currentQuestion === test.questions.length - 1}
-          className="nav-button"
+          className="btn btn-secondary"
         >
           Skip
         </button>
         <button
           onClick={handleNext}
           disabled={currentQuestion === test.questions.length - 1}
-          className="nav-button"
+          className="btn btn-secondary"
         >
           Next
         </button>
         <button
           onClick={() => handleSubmit(false)}
           disabled={submitting}
-          className="submit-button"
+          className="btn btn-primary"
         >
           {submitting ? "Submitting..." : "Submit"}
         </button>
