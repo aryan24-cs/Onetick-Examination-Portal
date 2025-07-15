@@ -10,7 +10,7 @@ import "../../../styles/userdashboard.css";
 interface Test {
   testId: string;
   name: string;
-  date: Date | string;
+  date: Date; // Changed to Date only
   duration: number;
   questions: any[];
 }
@@ -46,6 +46,7 @@ export default function UserDashboard() {
   const [activeSection, setActiveSection] = useState(
     searchParams.get("section") || "dashboard"
   );
+  const [activeTestTab, setActiveTestTab] = useState("ongoing");
   const pieChartRef = useRef<HTMLCanvasElement | null>(null);
   const lineChartRef = useRef<HTMLCanvasElement | null>(null);
   const pieChartInstance = useRef<Chart | null>(null);
@@ -55,6 +56,9 @@ export default function UserDashboard() {
     const section = searchParams.get("section") || "dashboard";
     console.log("Search params changed:", { section });
     setActiveSection(section);
+    if (section === "tests") {
+      setActiveTestTab("ongoing");
+    }
   }, [searchParams]);
 
   const isValidUUID = (str: string) => {
@@ -65,21 +69,33 @@ export default function UserDashboard() {
 
   const isTestOngoing = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     return now >= testStart && now <= testEnd;
   };
 
+  const isTestUpcoming = (test: Test) => {
+    const now = new Date();
+    const testStart = test.date;
+    return now < testStart;
+  };
+
+  const isTestPrevious = (test: Test) => {
+    const now = new Date();
+    const testEnd = new Date(test.date.getTime() + test.duration * 60 * 1000);
+    return now > testEnd;
+  };
+
   const isTestActive = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     return now >= testStart && now <= testEnd;
   };
 
   const getTestStatus = (test: Test) => {
     const now = new Date();
-    const testStart = new Date(test.date);
+    const testStart = test.date;
     const testEnd = new Date(testStart.getTime() + test.duration * 60 * 1000);
     if (now < testStart) {
       return `Starts at ${testStart.toLocaleString("en-IN", {
@@ -204,6 +220,11 @@ export default function UserDashboard() {
               console.error("Invalid test data filtered out:", test);
               return false;
             }
+            const parsedDate = new Date(test.date);
+            if (isNaN(parsedDate.getTime())) {
+              console.error("Invalid date in test data:", test);
+              return false;
+            }
             return true;
           });
 
@@ -216,12 +237,10 @@ export default function UserDashboard() {
 
           const parsedTests = validTests.map((test: Test) => ({
             ...test,
-            date: new Date(test.date),
+            date: new Date(test.date), // Ensure date is a Date object
           }));
 
-          setOngoingTests(
-            parsedTests.filter((test: Test) => isTestOngoing(test))
-          );
+          setOngoingTests(parsedTests.filter((test: Test) => isTestOngoing(test)));
           setTests(parsedTests);
         } catch (err: any) {
           console.error("Fetch tests error:", err.message);
@@ -331,7 +350,6 @@ export default function UserDashboard() {
   useEffect(() => {
     if (results.length > 0 && pieChartRef.current && lineChartRef.current) {
       try {
-        // Destroy existing charts to prevent memory leaks
         if (pieChartInstance.current) {
           pieChartInstance.current.destroy();
         }
@@ -339,7 +357,6 @@ export default function UserDashboard() {
           lineChartInstance.current.destroy();
         }
 
-        // Pie Chart: Grade Distribution
         const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
         results.forEach((result) => {
           const percentage = result.totalQuestions > 0 ? (result.score / result.totalQuestions) * 100 : 0;
@@ -371,7 +388,6 @@ export default function UserDashboard() {
           },
         });
 
-        // Line Chart: Score Trends
         const sortedResults = [...results].sort((a, b) =>
           new Date(a.testId?.date || 0).getTime() - new Date(b.testId?.date || 0).getTime()
         );
@@ -409,7 +425,6 @@ export default function UserDashboard() {
           },
         });
 
-        // Force chart resize to ensure proper rendering
         setTimeout(() => {
           pieChartInstance.current?.resize();
           lineChartInstance.current?.resize();
@@ -489,11 +504,17 @@ export default function UserDashboard() {
     router.push(`/user/test/${encodeURIComponent(cleanTestId)}`);
   };
 
+  const handleTestTabClick = (tab: string) => {
+    setActiveTestTab(tab);
+  };
+
   if (isLoading) {
     return <Loader />;
   }
 
   const { totalTests, averageScore, overallGrade } = calculateMetrics();
+  const upcomingTests = tests.filter(isTestUpcoming);
+  const previousTests = tests.filter(isTestPrevious);
 
   return (
     <Layout role="user">
@@ -553,12 +574,12 @@ export default function UserDashboard() {
                           <tr key={test.testId}>
                             <td>{test.name}</td>
                             <td>
-                              {new Date(test.date).toLocaleDateString("en-IN", {
+                              {test.date.toLocaleDateString("en-IN", {
                                 timeZone: "Asia/Kolkata",
                               })}
                             </td>
                             <td>
-                              {new Date(test.date).toLocaleTimeString("en-IN", {
+                              {test.date.toLocaleTimeString("en-IN", {
                                 hour: "2-digit",
                                 minute: "2-digit",
                                 timeZone: "Asia/Kolkata",
@@ -605,60 +626,189 @@ export default function UserDashboard() {
           {activeSection === "tests" && (
             <div className="card full-width">
               <h3 className="card-title">All Tests</h3>
-              {tests.length === 0 ? (
-                <div className="empty-state">
-                  <span className="material-icons">inbox</span>
-                  <p>No tests available.</p>
+              <div className="test-tabs">
+                <button
+                  className={`tab-button ${activeTestTab === "ongoing" ? "active-tab" : ""}`}
+                  onClick={() => handleTestTabClick("ongoing")}
+                >
+                  Ongoing
+                </button>
+                <button
+                  className={`tab-button ${activeTestTab === "upcoming" ? "active-tab" : ""}`}
+                  onClick={() => handleTestTabClick("upcoming")}
+                >
+                  Upcoming
+                </button>
+                <button
+                  className={`tab-button ${activeTestTab === "previous" ? "active-tab" : ""}`}
+                  onClick={() => handleTestTabClick("previous")}
+                >
+                  Previous
+                </button>
+              </div>
+              <div className="test-content">
+                <div className={`tab-content ${activeTestTab === "ongoing" ? "" : "hidden"}`}>
+                  <h2 className="tab-title">Ongoing Tests</h2>
+                  {ongoingTests.length === 0 ? (
+                    <div className="empty-state">
+                      <span className="material-icons">inbox</span>
+                      <p>No ongoing tests available.</p>
+                    </div>
+                  ) : (
+                    <div className="table-container">
+                      <table className="test-table">
+                        <thead>
+                          <tr>
+                            <th>Subject</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Duration</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ongoingTests.map((test) => (
+                            <tr key={test.testId}>
+                              <td>{test.name}</td>
+                              <td>
+                                {test.date.toLocaleDateString("en-IN", {
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </td>
+                              <td>
+                                {test.date.toLocaleTimeString("en-IN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </td>
+                              <td>{test.duration} min</td>
+                              <td>
+                                <button
+                                  onClick={() =>
+                                    handleTakeTestClick(test.testId, test.name)
+                                  }
+                                  className={`action-button ${isTestActive(test) ? "" : "disabled"}`}
+                                  disabled={!isTestActive(test)}
+                                  title={getTestStatus(test)}
+                                >
+                                  {isTestActive(test) ? "Start Test" : "Not Available"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <table className="test-table">
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th>Date</th>
-                      <th>Time</th>
-                      <th>Duration</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tests.map((test) => (
-                      <tr key={test.testId}>
-                        <td>{test.name}</td>
-                        <td>
-                          {new Date(test.date).toLocaleDateString("en-IN", {
-                            timeZone: "Asia/Kolkata",
-                          })}
-                        </td>
-                        <td>
-                          {new Date(test.date).toLocaleTimeString("en-IN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            timeZone: "Asia/Kolkata",
-                          })}
-                        </td>
-                        <td>{test.duration} min</td>
-                        <td>{getTestStatus(test)}</td>
-                        <td>
-                          <button
-                            onClick={() =>
-                              handleTakeTestClick(test.testId, test.name)
-                            }
-                            className={`action-button ${
-                              isTestActive(test) ? "" : "disabled"
-                            }`}
-                            disabled={!isTestActive(test)}
-                            title={getTestStatus(test)}
-                          >
-                            {isTestActive(test) ? "Take Test" : "Not Available"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                <div className={`tab-content ${activeTestTab === "upcoming" ? "" : "hidden"}`}>
+                  <h2 className="tab-title">Upcoming Tests</h2>
+                  {upcomingTests.length === 0 ? (
+                    <div className="empty-state">
+                      <span className="material-icons">inbox</span>
+                      <p>No upcoming tests available.</p>
+                    </div>
+                  ) : (
+                    <div className="table-container">
+                      <table className="test-table">
+                        <thead>
+                          <tr>
+                            <th>Subject</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Duration</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {upcomingTests.map((test) => (
+                            <tr key={test.testId}>
+                              <td>{test.name}</td>
+                              <td>
+                                {test.date.toLocaleDateString("en-IN", {
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </td>
+                              <td>
+                                {test.date.toLocaleTimeString("en-IN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </td>
+                              <td>{test.duration} min</td>
+                              <td>
+                                <button
+                                  className="action-button disabled"
+                                  disabled
+                                  title={getTestStatus(test)}
+                                >
+                                  Not Started
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div className={`tab-content ${activeTestTab === "previous" ? "" : "hidden"}`}>
+                  <h2 className="tab-title">Previous Tests</h2>
+                  {previousTests.length === 0 ? (
+                    <div className="empty-state">
+                      <span className="material-icons">inbox</span>
+                      <p>No previous tests available.</p>
+                    </div>
+                  ) : (
+                    <div className="table-container">
+                      <table className="test-table">
+                        <thead>
+                          <tr>
+                            <th>Subject</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previousTests.map((test) => (
+                            <tr key={test.testId}>
+                              <td>{test.name}</td>
+                              <td>
+                                {test.date.toLocaleDateString("en-IN", {
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </td>
+                              <td>
+                                {test.date.toLocaleTimeString("en-IN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </td>
+                              <td>{test.duration} min</td>
+                              <td>{getTestStatus(test)}</td>
+                              <td>
+                                <button
+                                  className="action-button disabled"
+                                  disabled
+                                  title={getTestStatus(test)}
+                                >
+                                  Not Available
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           {activeSection === "results" && (

@@ -7,15 +7,14 @@ body,
   font-family: "Poppins", sans-serif;
   background: #f3f4f6;
   color: #374151;
-  overflow: hidden; /* Remove global scrollbar */
+  overflow: hidden;
 }
 
 /* Dashboard Container */
 .dashboard-container {
   display: flex;
   height: 100vh;
-  /* margin-left: 256px; Matches sidebar width */
-  width: 100%; /* Full viewport width minus sidebar */
+  width: 100%;
 }
 
 /* Main Content */
@@ -23,8 +22,8 @@ body,
   flex: 1;
   padding: 32px;
   max-width: 1500px;
-  height: 100vh; /* Full viewport height */
-  overflow: hidden; /* Remove scrollbar */
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -66,13 +65,13 @@ body,
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 32px;
-  flex: 1; /* Take remaining height */
-  max-height: calc(100vh - 80px); /* Adjust for header height */
+  flex: 1;
+  max-height: calc(100vh - 80px);
   overflow: hidden;
 }
 
 /* Columns */
-.content-left{
+.content-left {
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -81,6 +80,7 @@ body,
   overflow: hidden;
   max-width: 700px;
 }
+
 .content-right {
   display: flex;
   flex-direction: column;
@@ -101,7 +101,7 @@ body,
 
 .card.full-width {
   grid-column: 1 / -1;
-  max-height: calc(100vh - 80px); /* Fit within viewport minus header */
+  max-height: calc(100vh - 80px);
   overflow: hidden;
 }
 
@@ -168,32 +168,86 @@ body,
   color: #d97706;
 }
 
+/* Test Tabs (New) */
+.test-tabs {
+  display: flex;
+  gap: 32px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 24px;
+}
+
+.tab-button {
+  padding: 16px 4px;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.tab-button:hover {
+  color: #374151;
+}
+
+.tab-button.active-tab {
+  border-bottom: 2px solid #4f46e5;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.test-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.tab-content {
+  display: block;
+}
+
+.tab-content.hidden {
+  display: none;
+}
+
+.tab-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 16px;
+}
+
+.table-container {
+  overflow-x: auto;
+  max-height: calc(100vh - 200px);
+}
+
 /* Tables */
 .test-table {
   width: 100%;
   border-collapse: collapse;
-  max-height: 300px; /* Limit table height */
+  max-height: 300px;
   display: block;
   overflow-y: auto;
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none;
 }
 
 .test-table::-webkit-scrollbar {
-  display: none; /* Chrome, Safari */
+  display: none;
 }
 
 .test-table th,
 .test-table td {
-  padding: 12px;
+  padding: 16px;
   text-align: left;
   font-size: 14px;
 }
 
 .test-table th {
   font-weight: 600;
-  color: #374151;
+  color: #4b5563;
   background: #f9fafb;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
   position: sticky;
   top: 0;
 }
@@ -209,7 +263,6 @@ body,
 /* Action Button */
 .action-button {
   padding: 8px 16px;
-  background: #4f46e5;
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -219,12 +272,17 @@ body,
   transition: background 0.2s ease;
 }
 
-.action-button:hover:not(.disabled) {
-  background: #4338ca;
+.action-button:not(.disabled) {
+  background: #10b981;
+}
+
+.action-button:not(.disabled):hover {
+  background: #059669;
 }
 
 .action-button.disabled {
   background: #d1d5db;
+  color: #6b7280;
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -234,7 +292,7 @@ body,
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 200px; /* Reduced to fit viewport */
+  min-height: 200px;
   max-height: 200px;
   width: 100%;
 }
@@ -263,7 +321,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 32px;
-  max-height: calc(100vh - 80px); /* Fit within viewport */
+  max-height: calc(100vh - 80px);
   overflow: hidden;
 }
 
@@ -369,7 +427,15 @@ body,
 
   .chart-container,
   .chart-canvas {
-    max-height: 150px; /* Smaller charts on mobile */
+    max-height: 150px;
+  }
+
+  .test-tabs {
+    gap: 16px;
+  }
+
+  .tab-button {
+    font-size: 12px;
   }
 }
 
