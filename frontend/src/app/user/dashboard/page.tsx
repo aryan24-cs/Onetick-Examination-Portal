@@ -4,8 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import Loader from "../../../components/loader";
 import Layout from "../../../components/Layout";
-import Chart from 'chart.js/auto';
-import '../../../styles/userdashboard.css';
+import Chart from "chart.js/auto";
+import "../../../styles/userdashboard.css";
 
 interface Test {
   testId: string;
@@ -139,11 +139,6 @@ export default function UserDashboard() {
             },
           });
 
-          console.log("Profile response status:", {
-            status: res.status,
-            statusText: res.statusText,
-          });
-
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
@@ -157,8 +152,6 @@ export default function UserDashboard() {
           }
 
           const data = await res.json();
-          console.log("Profile response data:", data);
-
           if (res.ok) {
             setProfile(data);
             localStorage.setItem("studentName", data.name);
@@ -187,11 +180,6 @@ export default function UserDashboard() {
             },
           });
 
-          console.log("Tests response status:", {
-            status: res.status,
-            statusText: res.statusText,
-          });
-
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
@@ -205,8 +193,6 @@ export default function UserDashboard() {
           }
 
           const data = await res.json();
-          console.log("Raw tests data:", data);
-
           const validTests = data.filter((test: Test) => {
             if (
               !test.testId ||
@@ -233,14 +219,6 @@ export default function UserDashboard() {
             date: new Date(test.date),
           }));
 
-          console.log(
-            "Parsed tests:",
-            parsedTests.map((t: Test) => ({
-              testId: t.testId,
-              name: t.name,
-              date: t.date.toString(),
-            }))
-          );
           setOngoingTests(
             parsedTests.filter((test: Test) => isTestOngoing(test))
           );
@@ -269,11 +247,6 @@ export default function UserDashboard() {
             },
           });
 
-          console.log("Results response status:", {
-            status: res.status,
-            statusText: res.statusText,
-          });
-
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
@@ -287,8 +260,6 @@ export default function UserDashboard() {
           }
 
           const data = await res.json();
-          console.log("Results response data:", data);
-
           if (res.ok) {
             setResults(data);
           } else {
@@ -316,11 +287,6 @@ export default function UserDashboard() {
             },
           });
 
-          console.log("Rank response status:", {
-            status: res.status,
-            statusText: res.statusText,
-          });
-
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
@@ -334,8 +300,6 @@ export default function UserDashboard() {
           }
 
           const data = await res.json();
-          console.log("Rank response data:", data);
-
           if (res.ok) {
             setRank(data.rank.toString());
           } else {
@@ -366,81 +330,94 @@ export default function UserDashboard() {
 
   useEffect(() => {
     if (results.length > 0 && pieChartRef.current && lineChartRef.current) {
-      // Destroy existing charts to prevent memory leaks
-      if (pieChartInstance.current) {
-        pieChartInstance.current.destroy();
+      try {
+        // Destroy existing charts to prevent memory leaks
+        if (pieChartInstance.current) {
+          pieChartInstance.current.destroy();
+        }
+        if (lineChartInstance.current) {
+          lineChartInstance.current.destroy();
+        }
+
+        // Pie Chart: Grade Distribution
+        const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+        results.forEach((result) => {
+          const percentage = result.totalQuestions > 0 ? (result.score / result.totalQuestions) * 100 : 0;
+          if (percentage >= 90) grades.A++;
+          else if (percentage >= 80) grades.B++;
+          else if (percentage >= 70) grades.C++;
+          else if (percentage >= 60) grades.D++;
+          else grades.F++;
+        });
+
+        pieChartInstance.current = new Chart(pieChartRef.current, {
+          type: "pie",
+          data: {
+            labels: ["A (90%+)", "B (80-89%)", "C (70-79%)", "D (60-69%)", "F (<60%)"],
+            datasets: [{
+              data: [grades.A, grades.B, grades.C, grades.D, grades.F],
+              backgroundColor: ["#10b981", "#34d399", "#60a5fa", "#f87171", "#ef4444"],
+              borderColor: "#ffffff",
+              borderWidth: 2,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "bottom" },
+              title: { display: true, text: "Grade Distribution", font: { size: 16 } },
+            },
+          },
+        });
+
+        // Line Chart: Score Trends
+        const sortedResults = [...results].sort((a, b) =>
+          new Date(a.testId?.date || 0).getTime() - new Date(b.testId?.date || 0).getTime()
+        );
+        const labels = sortedResults.map((r, i) => r.testId?.name || `Test ${i + 1}`);
+        const scores = sortedResults.map((r) =>
+          r.totalQuestions > 0 ? (r.score / r.totalQuestions) * 100 : 0
+        );
+
+        lineChartInstance.current = new Chart(lineChartRef.current, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              label: "Score (%)",
+              data: scores,
+              borderColor: "#1e3a8a",
+              backgroundColor: "rgba(30, 58, 138, 0.1)",
+              fill: true,
+              tension: 0.4,
+              pointBackgroundColor: "#1e3a8a",
+              pointRadius: 5,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true, max: 100, title: { display: true, text: "Score (%)" } },
+              x: { title: { display: true, text: "Tests" } },
+            },
+            plugins: {
+              legend: { display: false },
+              title: { display: true, text: "Score Trends Over Time", font: { size: 16 } },
+            },
+          },
+        });
+
+        // Force chart resize to ensure proper rendering
+        setTimeout(() => {
+          pieChartInstance.current?.resize();
+          lineChartInstance.current?.resize();
+        }, 0);
+      } catch (err: any) {
+        console.error("Chart rendering error:", err.message);
+        setError("Failed to render charts. Please try again.");
       }
-      if (lineChartInstance.current) {
-        lineChartInstance.current.destroy();
-      }
-
-      // Pie Chart: Grade Distribution
-      const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
-      results.forEach((result) => {
-        const percentage = result.totalQuestions > 0 ? (result.score / result.totalQuestions) * 100 : 0;
-        if (percentage >= 90) grades.A++;
-        else if (percentage >= 80) grades.B++;
-        else if (percentage >= 70) grades.C++;
-        else if (percentage >= 60) grades.D++;
-        else grades.F++;
-      });
-
-      pieChartInstance.current = new Chart(pieChartRef.current, {
-        type: 'pie',
-        data: {
-          labels: ['A (90%+)', 'B (80-89%)', 'C (70-79%)', 'D (60-69%)', 'F (<60%)'],
-          datasets: [{
-            data: [grades.A, grades.B, grades.C, grades.D, grades.F],
-            backgroundColor: ['#10b981', '#34d399', '#60a5fa', '#f87171', '#ef4444'],
-            borderColor: '#ffffff',
-            borderWidth: 2,
-          }],
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'bottom' },
-            title: { display: true, text: 'Grade Distribution', font: { size: 16 } },
-          },
-        },
-      });
-
-      // Line Chart: Score Trends
-      const sortedResults = [...results].sort((a, b) =>
-        new Date(a.testId?.date || 0).getTime() - new Date(b.testId?.date || 0).getTime()
-      );
-      const labels = sortedResults.map((r, i) => r.testId?.name || `Test ${i + 1}`);
-      const scores = sortedResults.map((r) =>
-        r.totalQuestions > 0 ? (r.score / r.totalQuestions) * 100 : 0
-      );
-
-      lineChartInstance.current = new Chart(lineChartRef.current, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Score (%)',
-            data: scores,
-            borderColor: '#1e3a8a', /* Navy blue for line */
-            backgroundColor: 'rgba(30, 58, 138, 0.1)',
-            fill: true,
-            tension: 0.4,
-            pointBackgroundColor: '#1e3a8a',
-            pointRadius: 5,
-          }],
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: { beginAtZero: true, max: 100, title: { display: true, text: 'Score (%)' } },
-            x: { title: { display: true, text: 'Tests' } },
-          },
-          plugins: {
-            legend: { display: false },
-            title: { display: true, text: 'Score Trends Over Time', font: { size: 16 } },
-          },
-        },
-      });
     }
 
     return () => {
@@ -464,7 +441,6 @@ export default function UserDashboard() {
         ).toFixed(0) + "%"
       : "N/A";
 
-    // Calculate overall grade based on average percentage
     const averagePercentage = totalTests
       ? results.reduce(
           (sum, r) => sum + (r.score / r.totalQuestions) * 100,
@@ -483,7 +459,7 @@ export default function UserDashboard() {
         : "F"
       : "N/A";
 
-    return { totalTests, averageScore, overallGrade, rank, averagePercentage };
+    return { totalTests, averageScore, overallGrade, rank };
   };
 
   const getGrade = (score: number, total: number) => {
@@ -513,136 +489,129 @@ export default function UserDashboard() {
     router.push(`/user/test/${encodeURIComponent(cleanTestId)}`);
   };
 
-  const calculateAge = (dob: string) => {
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age.toString();
-  };
-
-  const { totalTests, averageScore, overallGrade, averagePercentage } = calculateMetrics();
-
   if (isLoading) {
     return <Loader />;
   }
 
+  const { totalTests, averageScore, overallGrade } = calculateMetrics();
+
   return (
     <Layout role="user">
-      <div className="dashboard-header">
-        <h2 className="dashboard-title">Student Dashboard</h2>
-        {profile && (
-          <p className="welcome-message">Welcome, {profile.name}!</p>
-        )}
-      </div>
       <div className="dashboard-container">
-        {error && <p className="error-message">{error}</p>}
-        {activeSection === "dashboard" && (
-          <div className="dashboard-left">
-            <div className="section performance-overview">
-              <h3 className="section-title">Performance Metrics</h3>
-              <div className="metrics-grid">
-                <div className="metric-card">
-                  <p className="metric-label">Overall Grade</p>
-                  <p className="metric-value">{overallGrade}</p>
-                </div>
-                <div className="metric-card">
-                  <p className="metric-label">Average Score</p>
-                  <p className="metric-value">{averageScore}</p>
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${averagePercentage}%` }}
-                    ></div>
+        <main className="main-content">
+          <header className="dashboard-header">
+            <h1 className="dashboard-title">Student Dashboard</h1>
+            <div className="welcome-card">
+              <p>Welcome, {profile?.name || "Student"}!</p>
+            </div>
+          </header>
+          {error && <p className="error-message">{error}</p>}
+          {activeSection === "dashboard" && (
+            <div className="content-grid">
+              <div className="content-left">
+                <div className="card">
+                  <h3 className="card-title">Performance Metrics</h3>
+                  <div className="metrics-grid">
+                    <div className="metric-card grade">
+                      <p className="metric-label">Overall Grade</p>
+                      <p className="metric-value">{overallGrade}</p>
+                    </div>
+                    <div className="metric-card score">
+                      <p className="metric-label">Average Score</p>
+                      <p className="metric-value">{averageScore}</p>
+                    </div>
+                    <div className="metric-card tests">
+                      <p className="metric-label">Tests Taken</p>
+                      <p className="metric-value">{totalTests}</p>
+                    </div>
+                    <div className="metric-card rank">
+                      <p className="metric-label">Rank</p>
+                      <p className="metric-value">{rank}</p>
+                    </div>
                   </div>
                 </div>
-                <div className="metric-card">
-                  <p className="metric-label">Tests Taken</p>
-                  <p className="metric-value">{totalTests}</p>
-                </div>
-                <div className="metric-card">
-                  <p className="metric-label">Rank</p>
-                  <p className="metric-value">{rank}</p>
-                </div>
-              </div>
-              <h3 className="section-title">Ongoing Tests</h3>
-              <div className="table-container">
-                {ongoingTests.length === 0 ? (
-                  <p className="empty-state">No ongoing tests available.</p>
-                ) : (
-                  <table className="dashboard-table">
-                    <thead>
-                      <tr>
-                        <th>Subject</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ongoingTests.map((test) => (
-                        <tr key={test.testId}>
-                          <td>{test.name}</td>
-                          <td>
-                            {new Date(test.date).toLocaleDateString("en-IN", {
-                              timeZone: "Asia/Kolkata",
-                            })}
-                          </td>
-                          <td>
-                            {new Date(test.date).toLocaleTimeString("en-IN", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              timeZone: "Asia/Kolkata",
-                            })}
-                          </td>
-                          <td>{getTestStatus(test)}</td>
-                          <td>
-                            <button
-                              onClick={() =>
-                                handleTakeTestClick(test.testId, test.name)
-                              }
-                              className={`action-button take-test-btn ${
-                                isTestActive(test) ? "" : "disabled"
-                              }`}
-                              disabled={!isTestActive(test)}
-                              title={getTestStatus(test)}
-                            >
-                              {isTestActive(test) ? "Take Test" : "Not Available"}
-                            </button>
-                          </td>
+                <div className="card">
+                  <h3 className="card-title">Ongoing Tests</h3>
+                  {ongoingTests.length === 0 ? (
+                    <div className="empty-state">
+                      <span className="material-icons">inbox</span>
+                      <p>No ongoing tests available.</p>
+                    </div>
+                  ) : (
+                    <table className="test-table">
+                      <thead>
+                        <tr>
+                          <th>Subject</th>
+                          <th>Date</th>
+                          <th>Time</th>
+                          <th>Status</th>
+                          <th>Action</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                      </thead>
+                      <tbody>
+                        {ongoingTests.map((test) => (
+                          <tr key={test.testId}>
+                            <td>{test.name}</td>
+                            <td>
+                              {new Date(test.date).toLocaleDateString("en-IN", {
+                                timeZone: "Asia/Kolkata",
+                              })}
+                            </td>
+                            <td>
+                              {new Date(test.date).toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZone: "Asia/Kolkata",
+                              })}
+                            </td>
+                            <td>{getTestStatus(test)}</td>
+                            <td>
+                              <button
+                                onClick={() =>
+                                  handleTakeTestClick(test.testId, test.name)
+                                }
+                                className={`action-button ${
+                                  isTestActive(test) ? "" : "disabled"
+                                }`}
+                                disabled={!isTestActive(test)}
+                                title={getTestStatus(test)}
+                              >
+                                {isTestActive(test) ? "Take Test" : "Not Available"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+              <div className="content-right">
+                <div className="card">
+                  <h3 className="card-title">Grade Distribution</h3>
+                  <div className="chart-container">
+                    <canvas ref={pieChartRef} className="chart-canvas"></canvas>
+                  </div>
+                </div>
+                <div className="card">
+                  <h3 className="card-title">Score Trends</h3>
+                  <div className="chart-container">
+                    <canvas ref={lineChartRef} className="chart-canvas"></canvas>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-        {activeSection === "dashboard" && (
-          <div className="dashboard-right">
-            <div className="chart-card">
-              <h3 className="section-title">Grade Distribution</h3>
-              <canvas ref={pieChartRef} className="chart-canvas"></canvas>
-            </div>
-            <div className="chart-card">
-              <h3 className="section-title">Score Trends</h3>
-              <canvas ref={lineChartRef} className="chart-canvas"></canvas>
-            </div>
-          </div>
-        )}
-        {activeSection === "tests" && (
-          <div className="section full-width">
-            <h3 className="section-title">All Tests</h3>
-            <div className="table-container">
+          )}
+          {activeSection === "tests" && (
+            <div className="card full-width">
+              <h3 className="card-title">All Tests</h3>
               {tests.length === 0 ? (
-                <p className="empty-state">No tests available.</p>
+                <div className="empty-state">
+                  <span className="material-icons">inbox</span>
+                  <p>No tests available.</p>
+                </div>
               ) : (
-                <table className="dashboard-table">
+                <table className="test-table">
                   <thead>
                     <tr>
                       <th>Subject</th>
@@ -676,7 +645,7 @@ export default function UserDashboard() {
                             onClick={() =>
                               handleTakeTestClick(test.testId, test.name)
                             }
-                            className={`action-button take-test-btn ${
+                            className={`action-button ${
                               isTestActive(test) ? "" : "disabled"
                             }`}
                             disabled={!isTestActive(test)}
@@ -691,16 +660,17 @@ export default function UserDashboard() {
                 </table>
               )}
             </div>
-          </div>
-        )}
-        {activeSection === "results" && (
-          <div className="section full-width">
-            <h3 className="section-title">Previous Test Results</h3>
-            <div className="table-container">
+          )}
+          {activeSection === "results" && (
+            <div className="card full-width">
+              <h3 className="card-title">Previous Test Results</h3>
               {results.length === 0 ? (
-                <p className="empty-state">No previous test results available.</p>
+                <div className="empty-state">
+                  <span className="material-icons">inbox</span>
+                  <p>No previous test results available.</p>
+                </div>
               ) : (
-                <table className="dashboard-table">
+                <table className="test-table">
                   <thead>
                     <tr>
                       <th>Subject</th>
@@ -714,14 +684,12 @@ export default function UserDashboard() {
                       <tr key={index}>
                         <td>{result.testId ? result.testId.name : "Unknown Test"}</td>
                         <td>
-                          {result.testId ? (
-                            new Date(result.testId.date).toLocaleDateString(
-                              "en-IN",
-                              { timeZone: "Asia/Kolkata" }
-                            )
-                          ) : (
-                            "N/A"
-                          )}
+                          {result.testId
+                            ? new Date(result.testId.date).toLocaleDateString(
+                                "en-IN",
+                                { timeZone: "Asia/Kolkata" }
+                              )
+                            : "N/A"}
                         </td>
                         <td>
                           {result.totalQuestions > 0
@@ -739,79 +707,50 @@ export default function UserDashboard() {
                 </table>
               )}
             </div>
-          </div>
-        )}
-        {activeSection === "profile" && (
-          <div className="section full-width profile-section">
-            <h3 className="section-title">Student Profile</h3>
-            <p className="section-description">Manage your personal details and academic achievements.</p>
-            {profile && (
-              <div className="profile-container">
-                <div className="profile-header">
-                  <div
-                    className="profile-picture"
-                    style={{
-                      backgroundImage: `url("https://via.placeholder.com/128")`,
-                    }}
-                  ></div>
-                  <div className="profile-info">
-                    <p className="profile-name">{profile.name}</p>
-                    <p className="profile-meta">Student ID: {localStorage.getItem("studentId")}</p>
-                    <p className="profile-meta">Joined: {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
-                  </div>
-                </div>
-                <h4 className="profile-subheading">Personal Details</h4>
-                <div className="personal-details">
-                  <div className="detail-item">
-                    <p className="detail-label">Name</p>
-                    <p className="detail-value">{profile.name}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Age</p>
-                    <p className="detail-value">{calculateAge(profile.profile.dob)}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Contact Number</p>
-                    <p className="detail-value">{profile.profile.phone}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Email</p>
-                    <p className="detail-value">{profile.email}</p>
-                  </div>
-                  <div className="detail-item">
-                    <p className="detail-label">Address</p>
-                    <p className="detail-value">{profile.profile.address}</p>
-                  </div>
-                </div>
-                <h4 className="profile-subheading">Academic Achievements</h4>
-                <div className="achievements">
-                  <div className="achievement-item">
-                    <p className="achievement-title">Overall Grade</p>
-                    <p className="achievement-value">{overallGrade}</p>
-                  </div>
-                  <div className="achievement-item">
-                    <p className="achievement-title">Average Score</p>
-                    <p className="achievement-value">{averageScore}</p>
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${averagePercentage}%` }}
-                      ></div>
+          )}
+          {activeSection === "profile" && (
+            <div className="card full-width">
+              <h3 className="card-title">Student Profile</h3>
+              {profile && (
+                <div className="profile-container">
+                  <div className="profile-header">
+                    <div className="profile-picture">
+                      <span className="profile-initials">
+                        {profile.name.charAt(0)}
+                      </span>
+                    </div>
+                    <div className="profile-info">
+                      <p className="profile-name">{profile.name}</p>
+                      <p className="profile-meta">Student ID: {localStorage.getItem("studentId")}</p>
+                      <p className="profile-meta">
+                        Joined: {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
+                      </p>
                     </div>
                   </div>
-                  <div className="achievement-item">
-                    <p className="achievement-title">Tests Taken</p>
-                    <p className="achievement-value">{totalTests}</p>
-                  </div>
-                  <div className="achievement-item">
-                    <p className="achievement-title">Rank</p>
-                    <p className="achievement-value">{rank}</p>
+                  <h4 className="profile-subheading">Personal Details</h4>
+                  <div className="personal-details">
+                    <div className="detail-item">
+                      <p className="detail-label">Name</p>
+                      <p className="detail-value">{profile.name}</p>
+                    </div>
+                    <div className="detail-item">
+                      <p className="detail-label">Email</p>
+                      <p className="detail-value">{profile.email}</p>
+                    </div>
+                    <div className="detail-item">
+                      <p className="detail-label">Contact Number</p>
+                      <p className="detail-value">{profile.profile.phone}</p>
+                    </div>
+                    <div className="detail-item">
+                      <p className="detail-label">Address</p>
+                      <p className="detail-value">{profile.profile.address}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </main>
       </div>
     </Layout>
   );
