@@ -10,7 +10,7 @@ import "../../../styles/userdashboard.css";
 interface Test {
   testId: string;
   name: string;
-  date: Date; // Changed to Date only
+  date: Date;
   duration: number;
   questions: any[];
 }
@@ -905,5 +905,3 @@ export default function UserDashboard() {
     </Layout>
   );
 }
-
-
